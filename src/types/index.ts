@@ -37,4 +37,16 @@ export interface Idea {
   scheduledDate?: Date;
   copyText?: string;
   aiHooks?: string[];
+  scriptText?: string;
+  productionLinks?: {
+    capcut?: string;
+    drive?: string;
+    audio?: string;
+  };
+  checklist?: {
+    id: string;
+    text: string;
+    completed: boolean;
+  }[];
+  assignedTo?: string;
 }

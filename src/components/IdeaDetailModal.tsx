@@ -10,13 +10,13 @@ import {
   Platform,
   StyleSheet,
   Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Idea, IdeaStatus, STATUS_CONFIG, Channel } from '../types';
+import { Idea, IdeaStatus, STATUS_CONFIG } from '../types';
 import { useData } from '../context/DataContext';
-import { ChannelBadge } from './ChannelBadge';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
 interface Props {
@@ -26,17 +26,30 @@ interface Props {
 }
 
 const PIPELINE_STATUSES: IdeaStatus[] = ['idea', 'script', 'editing', 'review', 'ready'];
+const TEAM_MEMBERS = ['@Joswill', '@Maria', '@Carlos', '@Ana'];
 
 export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) => {
   const { ideas, events, updateIdea, deleteIdea } = useData();
   const idea = ideas.find((i) => i.id === ideaId);
 
+  // States
   const [copyText, setCopyText] = useState('');
+  const [scriptText, setScriptText] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [newChecklistItem, setNewChecklistItem] = useState('');
+  
+  // Production Links
+  const [linkCapCut, setLinkCapCut] = useState('');
+  const [linkDrive, setLinkDrive] = useState('');
+  const [linkAudio, setLinkAudio] = useState('');
 
   useEffect(() => {
     if (idea) {
       setCopyText(idea.copyText || '');
+      setScriptText(idea.scriptText || '');
+      setLinkCapCut(idea.productionLinks?.capcut || '');
+      setLinkDrive(idea.productionLinks?.drive || '');
+      setLinkAudio(idea.productionLinks?.audio || '');
     }
   }, [idea]);
 
@@ -55,13 +68,59 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
     }
   };
 
-  const handleSaveCopy = () => {
-    updateIdea(idea.id, { copyText });
+  const saveTextsAndLinks = () => {
+    updateIdea(idea.id, {
+      copyText,
+      scriptText,
+      productionLinks: {
+        capcut: linkCapCut,
+        drive: linkDrive,
+        audio: linkAudio,
+      },
+    });
   };
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(copyText);
     Alert.alert('¡Copiado!', 'El copy se ha copiado al portapapeles.');
+  };
+
+  const openLink = async (url: string) => {
+    if (!url || !url.trim()) {
+      Alert.alert('Link vacío', 'Debes ingresar un enlace primero.');
+      return;
+    }
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    } else {
+      Alert.alert('Error', 'No se puede abrir este enlace. Verifica que la URL sea válida.');
+    }
+  };
+
+  const addChecklistItem = () => {
+    if (!newChecklistItem.trim()) return;
+    const currentChecklist = idea.checklist || [];
+    const newItem = {
+      id: `chk-${Date.now()}`,
+      text: newChecklistItem.trim(),
+      completed: false,
+    };
+    updateIdea(idea.id, { checklist: [...currentChecklist, newItem] });
+    setNewChecklistItem('');
+  };
+
+  const toggleChecklistItem = (id: string) => {
+    const currentChecklist = idea.checklist || [];
+    const updated = currentChecklist.map((c) =>
+      c.id === id ? { ...c, completed: !c.completed } : c
+    );
+    updateIdea(idea.id, { checklist: updated });
+  };
+
+  const handleDeleteChecklist = (id: string) => {
+    const currentChecklist = idea.checklist || [];
+    updateIdea(idea.id, { checklist: currentChecklist.filter(c => c.id !== id) });
   };
 
   const handleDelete = () => {
@@ -78,21 +137,28 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
     ]);
   };
 
+  // Checklist Progress
+  const totalTasks = idea.checklist?.length || 0;
+  const completedTasks = idea.checklist?.filter((c) => c.completed).length || 0;
+  const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+        
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.iconButton}>
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Detalle de Idea</Text>
+          <Text style={styles.headerTitle}>Ficha Técnica de Producción</Text>
           <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
             <Ionicons name="trash-outline" size={24} color={colors.error} />
           </TouchableOpacity>
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          {/* Main Idea Text */}
+          
           <Text style={styles.ideaText}>{idea.text}</Text>
 
           {/* Event Badge */}
@@ -103,7 +169,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             </View>
           )}
 
-          {/* Status Pipeline */}
+          {/* Pipeline */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Estado (Pipeline)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
@@ -133,48 +199,169 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             </ScrollView>
           </View>
 
-          {/* Schedule Date */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Fecha Programada</Text>
-            <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-              <Ionicons name="calendar-outline" size={20} color={colors.textPrimary} />
-              <Text style={styles.dateText}>
-                {idea.scheduledDate
-                  ? idea.scheduledDate.toLocaleDateString('es-ES', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                    })
-                  : 'Sin fecha asignada'}
-              </Text>
-            </TouchableOpacity>
-            {showDatePicker && (
-              <DateTimePicker
-                value={idea.scheduledDate || new Date()}
-                mode="date"
-                display="default"
-                onChange={handleDateChange}
-              />
-            )}
-          </View>
-
-          {/* Channels */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Canales Seleccionados</Text>
-            <View style={styles.channelsContainer}>
-              {idea.channels.length > 0 ? (
-                idea.channels.map((ch) => <ChannelBadge key={ch} channel={ch} />)
-              ) : (
-                <Text style={styles.noChannels}>No hay canales seleccionados</Text>
+          {/* Asignación y Fecha */}
+          <View style={styles.rowSection}>
+            <View style={[styles.section, { flex: 1 }]}>
+              <Text style={styles.sectionTitle}>Fecha Programada</Text>
+              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+                <Ionicons name="calendar-outline" size={20} color={colors.textPrimary} />
+                <Text style={styles.dateText}>
+                  {idea.scheduledDate
+                    ? idea.scheduledDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+                    : 'Sin fecha'}
+                </Text>
+              </TouchableOpacity>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={idea.scheduledDate || new Date()}
+                  mode="date"
+                  display="default"
+                  onChange={handleDateChange}
+                />
               )}
+            </View>
+            <View style={[styles.section, { flex: 1 }]}>
+              <Text style={styles.sectionTitle}>Responsable</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                {TEAM_MEMBERS.map((member) => (
+                  <TouchableOpacity
+                    key={member}
+                    style={[
+                      styles.memberBadge,
+                      idea.assignedTo === member && styles.memberBadgeActive
+                    ]}
+                    onPress={() => updateIdea(idea.id, { assignedTo: member })}
+                  >
+                    <Text style={[styles.memberText, idea.assignedTo === member && styles.memberTextActive]}>
+                      {member}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           </View>
 
-          {/* AI Hooks & Copy */}
+          {/* Checklist */}
+          <View style={styles.section}>
+            <View style={styles.progressRow}>
+              <Text style={styles.sectionTitle}>Checklist de Producción</Text>
+              <Text style={styles.progressCounter}>{completedTasks}/{totalTasks}</Text>
+            </View>
+            
+            {totalTasks > 0 && (
+              <View style={styles.progressBarBg}>
+                <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
+              </View>
+            )}
+
+            <View style={styles.checklistContainer}>
+              {idea.checklist?.map((item) => (
+                <View key={item.id} style={styles.checklistItem}>
+                  <TouchableOpacity onPress={() => toggleChecklistItem(item.id)} style={styles.checkIcon}>
+                    <Ionicons 
+                      name={item.completed ? "checkmark-circle" : "ellipse-outline"} 
+                      size={24} 
+                      color={item.completed ? colors.success : colors.textMuted} 
+                    />
+                  </TouchableOpacity>
+                  <Text style={[styles.checklistText, item.completed && styles.checklistTextDone]}>
+                    {item.text}
+                  </Text>
+                  <TouchableOpacity onPress={() => handleDeleteChecklist(item.id)}>
+                    <Ionicons name="close" size={20} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <View style={styles.addChecklistRow}>
+                <TextInput
+                  style={styles.addChecklistInput}
+                  placeholder="Ej: Grabar voz en off..."
+                  placeholderTextColor={colors.textMuted}
+                  value={newChecklistItem}
+                  onChangeText={setNewChecklistItem}
+                  onSubmitEditing={addChecklistItem}
+                />
+                <TouchableOpacity style={styles.addChecklistBtn} onPress={addChecklistItem}>
+                  <Ionicons name="add" size={20} color={colors.background} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Production Links */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Links de Edición</Text>
+            <View style={styles.linksContainer}>
+              
+              <View style={styles.linkRow}>
+                <Ionicons name="cut-outline" size={20} color={colors.textPrimary} />
+                <TextInput
+                  style={styles.linkInput}
+                  placeholder="Link de CapCut / Premiere"
+                  placeholderTextColor={colors.textMuted}
+                  value={linkCapCut}
+                  onChangeText={setLinkCapCut}
+                  onBlur={saveTextsAndLinks}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => openLink(linkCapCut)}>
+                  <Ionicons name="open-outline" size={20} color={colors.accentLight} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.linkRow}>
+                <Ionicons name="folder-outline" size={20} color={colors.textPrimary} />
+                <TextInput
+                  style={styles.linkInput}
+                  placeholder="Link de Materiales (Drive)"
+                  placeholderTextColor={colors.textMuted}
+                  value={linkDrive}
+                  onChangeText={setLinkDrive}
+                  onBlur={saveTextsAndLinks}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => openLink(linkDrive)}>
+                  <Ionicons name="open-outline" size={20} color={colors.accentLight} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.linkRow}>
+                <Ionicons name="musical-notes-outline" size={20} color={colors.textPrimary} />
+                <TextInput
+                  style={styles.linkInput}
+                  placeholder="Link de Audio (TikTok/IG)"
+                  placeholderTextColor={colors.textMuted}
+                  value={linkAudio}
+                  onChangeText={setLinkAudio}
+                  onBlur={saveTextsAndLinks}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity onPress={() => openLink(linkAudio)}>
+                  <Ionicons name="open-outline" size={20} color={colors.accentLight} />
+                </TouchableOpacity>
+              </View>
+
+            </View>
+          </View>
+
+          {/* Guión y Copy */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Guión / Storyboard</Text>
+            <TextInput
+              style={styles.textArea}
+              multiline
+              value={scriptText}
+              onChangeText={setScriptText}
+              placeholder="Escribe aquí el guión técnico o los pasos del video..."
+              placeholderTextColor={colors.textMuted}
+              onBlur={saveTextsAndLinks}
+            />
+          </View>
+
           <View style={styles.section}>
             <View style={styles.aiHeader}>
               <Ionicons name="sparkles" size={20} color={colors.accentLight} />
-              <Text style={styles.sectionTitle}>IA & Copy</Text>
+              <Text style={styles.sectionTitle}>IA & Copy Final</Text>
             </View>
 
             {idea.aiHooks && idea.aiHooks.length > 0 && (
@@ -190,17 +377,17 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
             <View style={styles.copyContainer}>
               <TextInput
-                style={styles.copyInput}
+                style={styles.textArea}
                 multiline
                 value={copyText}
                 onChangeText={setCopyText}
                 placeholder="Escribe el copy final aquí..."
                 placeholderTextColor={colors.textMuted}
-                onBlur={handleSaveCopy}
+                onBlur={saveTextsAndLinks}
               />
               <TouchableOpacity style={styles.copyButton} onPress={copyToClipboard}>
                 <Ionicons name="copy-outline" size={20} color={colors.background} />
-                <Text style={styles.copyButtonText}>Copiar al Portapapeles</Text>
+                <Text style={styles.copyButtonText}>Copiar Copy al Portapapeles</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -225,7 +412,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerTitle: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.md,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -238,10 +425,10 @@ const styles = StyleSheet.create({
   },
   ideaText: {
     fontSize: fontSize.xl,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.textPrimary,
     lineHeight: 28,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   eventBadge: {
     flexDirection: 'row',
@@ -261,6 +448,10 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: spacing.xxl,
+  },
+  rowSection: {
+    flexDirection: 'row',
+    gap: spacing.lg,
   },
   sectionTitle: {
     fontSize: fontSize.md,
@@ -295,21 +486,122 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   dateText: {
+    fontSize: fontSize.sm,
+    color: colors.textPrimary,
+  },
+  memberBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: spacing.sm,
+  },
+  memberBadgeActive: {
+    backgroundColor: colors.accentSubtle,
+    borderColor: colors.accent,
+  },
+  memberText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  memberTextActive: {
+    color: colors.accentLight,
+    fontWeight: '700',
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  progressCounter: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: colors.surface,
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: colors.success,
+    borderRadius: 3,
+  },
+  checklistContainer: {
+    gap: spacing.sm,
+  },
+  checklistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  checkIcon: {
+    padding: 2,
+  },
+  checklistText: {
+    flex: 1,
     fontSize: fontSize.md,
     color: colors.textPrimary,
   },
-  channelsContainer: {
+  checklistTextDone: {
+    color: colors.textMuted,
+    textDecorationLine: 'line-through',
+  },
+  addChecklistRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  addChecklistInput: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    height: 44,
+    color: colors.textPrimary,
+  },
+  addChecklistBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: colors.accent,
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  linksContainer: {
+    gap: spacing.md,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    height: 48,
     gap: spacing.sm,
   },
-  noChannels: {
+  linkInput: {
+    flex: 1,
+    color: colors.textPrimary,
     fontSize: fontSize.sm,
-    color: colors.textMuted,
-    fontStyle: 'italic',
   },
   aiHeader: {
     flexDirection: 'row',
@@ -341,7 +633,7 @@ const styles = StyleSheet.create({
   copyContainer: {
     gap: spacing.md,
   },
-  copyInput: {
+  textArea: {
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
