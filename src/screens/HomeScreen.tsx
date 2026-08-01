@@ -128,7 +128,12 @@ export const HomeScreen: React.FC = () => {
       <FlatList
         data={ideas}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <IdeaCard idea={item} />}
+        renderItem={({ item }) => (
+          <IdeaCard
+            idea={item}
+            event={events.find((e) => e.id === item.eventId)}
+          />
+        )}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmptyState}
         contentContainerStyle={styles.listContent}

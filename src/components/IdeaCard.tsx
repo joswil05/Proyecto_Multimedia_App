@@ -1,12 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Idea, STATUS_CONFIG } from '../types';
+import { Idea, PinnedEvent, STATUS_CONFIG } from '../types';
 import { ChannelBadge } from './ChannelBadge';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
 interface Props {
   idea: Idea;
+  event?: PinnedEvent;
 }
 
 function getTimeAgo(date: Date): string {
@@ -20,7 +21,7 @@ function getTimeAgo(date: Date): string {
   return `hace ${days}d`;
 }
 
-export const IdeaCard: React.FC<Props> = ({ idea }) => {
+export const IdeaCard: React.FC<Props> = ({ idea, event }) => {
   const statusConfig = STATUS_CONFIG[idea.status];
   const timeAgo = getTimeAgo(idea.createdAt);
 
@@ -35,6 +36,13 @@ export const IdeaCard: React.FC<Props> = ({ idea }) => {
         </View>
         <Text style={styles.time}>{timeAgo}</Text>
       </View>
+
+      {event && (
+        <View style={styles.eventBadge}>
+          <Ionicons name={event.icon as any} size={12} color={colors.accentLight} />
+          <Text style={styles.eventBadgeText}>{event.title}</Text>
+        </View>
+      )}
 
       <Text style={styles.ideaText}>{idea.text}</Text>
 
@@ -110,5 +118,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.accentLight,
     fontWeight: '500',
+  },
+  eventBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.accentSubtle,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  eventBadgeText: {
+    fontSize: fontSize.xs,
+    color: colors.accentLight,
+    fontWeight: '600',
   },
 });

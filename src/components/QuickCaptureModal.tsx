@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -35,8 +35,14 @@ export const QuickCaptureModal: React.FC<Props> = ({
 }) => {
   const [text, setText] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(pinnedEventId);
   const [useAI, setUseAI] = useState(true);
+
+  useEffect(() => {
+    if (visible) {
+      setSelectedEventId(pinnedEventId);
+    }
+  }, [visible, pinnedEventId]);
 
   const toggleChannel = (channel: Channel) => {
     setSelectedChannels((prev) =>
