@@ -3,79 +3,47 @@ import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { PinnedEventBanner } from '../components/PinnedEventBanner';
+import { EventsCarousel } from '../components/EventsCarousel';
 import { IdeaCard } from '../components/IdeaCard';
 import { FloatingActionButton } from '../components/FloatingActionButton';
 import { QuickCaptureModal } from '../components/QuickCaptureModal';
 import { EventManagerModal } from '../components/EventManagerModal';
-import { Idea, PinnedEvent } from '../types';
+import { EventDetailModal } from '../components/EventDetailModal';
+import { IdeaDetailModal } from '../components/IdeaDetailModal';
+import { useData } from '../context/DataContext';
+import { PinnedEvent } from '../types';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
-// ── Component ──────────────────────────────────────────────────────────
 export const HomeScreen: React.FC = () => {
-  // Events state
-  const [events, setEvents] = useState<PinnedEvent[]>([]);
-  const [pinnedEventId, setPinnedEventId] = useState<string | null>(null);
-
-  // Ideas state
-  const [ideas, setIdeas] = useState<Idea[]>([]);
+  const {
+    events,
+    ideas,
+    pinnedEventId,
+    addEvent,
+    deleteEvent,
+    pinEvent,
+    addIdea,
+  } = useData();
 
   // Modal states
   const [captureModalVisible, setCaptureModalVisible] = useState(false);
   const [eventManagerVisible, setEventManagerVisible] = useState(false);
+  const [eventDetailVisible, setEventDetailVisible] = useState(false);
+  const [ideaDetailVisible, setIdeaDetailVisible] = useState(false);
+  
+  const [selectedEvent, setSelectedEvent] = useState<PinnedEvent | null>(null);
+  const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
 
-  // Derived
-  const pinnedEvent = events.find((e) => e.id === pinnedEventId) || null;
+  // ── Handlers ─────────────────────────────────────────────────────────
+  const handleEventPress = (event: PinnedEvent) => {
+    setSelectedEvent(event);
+    setEventDetailVisible(true);
+  };
 
-  // ── Event Handlers ─────────────────────────────────────────────────
-  const handleCreateEvent = useCallback(
-    (newEvent: Omit<PinnedEvent, 'id' | 'completedContent'>) => {
-      const event: PinnedEvent = {
-        ...newEvent,
-        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        completedContent: 0,
-      };
-      setEvents((prev) => [...prev, event]);
-      setPinnedEventId(event.id);
-      setEventManagerVisible(false);
-    },
-    []
-  );
-
-  const handlePinEvent = useCallback((eventId: string | null) => {
-    setPinnedEventId(eventId);
-  }, []);
-
-  const handleDeleteEvent = useCallback(
-    (eventId: string) => {
-      setEvents((prev) => prev.filter((e) => e.id !== eventId));
-      if (pinnedEventId === eventId) {
-        setPinnedEventId(null);
-      }
-      // Unlink ideas from deleted event
-      setIdeas((prev) =>
-        prev.map((idea) =>
-          idea.eventId === eventId ? { ...idea, eventId: undefined } : idea
-        )
-      );
-    },
-    [pinnedEventId]
-  );
-
-  // ── Idea Handlers ──────────────────────────────────────────────────
-  const handleSaveIdea = useCallback(
-    (newIdea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => {
-      const idea: Idea = {
-        ...newIdea,
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-        status: 'idea',
-        createdAt: new Date(),
-      };
-      setIdeas((prev) => [idea, ...prev]);
-      setCaptureModalVisible(false);
-    },
-    []
-  );
+  const handleIdeaPress = (ideaId: string) => {
+    setSelectedIdeaId(ideaId);
+    setIdeaDetailVisible(true);
+  };
 
   // ── List Components ────────────────────────────────────────────────
   const renderHeader = useCallback(
@@ -89,11 +57,18 @@ export const HomeScreen: React.FC = () => {
               <Text style={styles.orgName}>Equipo de Medios</Text>
             </View>
           </View>
+          <Ionicons
+            name="settings-outline"
+            size={24}
+            color={colors.textSecondary}
+            onPress={() => setEventManagerVisible(true)}
+          />
         </View>
 
-        <PinnedEventBanner
-          event={pinnedEvent}
-          onManageEvents={() => setEventManagerVisible(true)}
+        <EventsCarousel
+          events={events}
+          onEventPress={handleEventPress}
+          onCreateEvent={() => setEventManagerVisible(true)}
         />
 
         <View style={styles.sectionHeader}>
@@ -104,7 +79,7 @@ export const HomeScreen: React.FC = () => {
         </View>
       </>
     ),
-    [pinnedEvent, ideas.length]
+    [events, ideas.length]
   );
 
   const renderEmptyState = useCallback(
@@ -122,7 +97,7 @@ export const HomeScreen: React.FC = () => {
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="light" />
 
       <FlatList
@@ -132,6 +107,7 @@ export const HomeScreen: React.FC = () => {
           <IdeaCard
             idea={item}
             event={events.find((e) => e.id === item.eventId)}
+            onPress={() => handleIdeaPress(item.id)}
           />
         )}
         ListHeaderComponent={renderHeader}
@@ -145,7 +121,10 @@ export const HomeScreen: React.FC = () => {
       <QuickCaptureModal
         visible={captureModalVisible}
         onClose={() => setCaptureModalVisible(false)}
-        onSave={handleSaveIdea}
+        onSave={(idea) => {
+          addIdea(idea);
+          setCaptureModalVisible(false);
+        }}
         events={events}
         pinnedEventId={pinnedEventId}
       />
@@ -155,9 +134,24 @@ export const HomeScreen: React.FC = () => {
         onClose={() => setEventManagerVisible(false)}
         events={events}
         pinnedEventId={pinnedEventId}
-        onCreateEvent={handleCreateEvent}
-        onPinEvent={handlePinEvent}
-        onDeleteEvent={handleDeleteEvent}
+        onCreateEvent={(e) => {
+          addEvent(e);
+          setEventManagerVisible(false);
+        }}
+        onPinEvent={pinEvent}
+        onDeleteEvent={deleteEvent}
+      />
+
+      <EventDetailModal
+        visible={eventDetailVisible}
+        onClose={() => setEventDetailVisible(false)}
+        event={selectedEvent}
+      />
+
+      <IdeaDetailModal
+        visible={ideaDetailVisible}
+        onClose={() => setIdeaDetailVisible(false)}
+        ideaId={selectedIdeaId}
       />
     </SafeAreaView>
   );
@@ -170,6 +164,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   appHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
@@ -195,7 +192,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
   sectionTitle: {

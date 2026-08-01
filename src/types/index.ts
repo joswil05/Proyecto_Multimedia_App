@@ -34,4 +34,7 @@ export interface Idea {
   eventId?: string;
   useAI: boolean;
   createdAt: Date;
+  scheduledDate?: Date;
+  copyText?: string;
+  aiHooks?: string[];
 }

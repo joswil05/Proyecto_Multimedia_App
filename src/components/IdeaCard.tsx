@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Idea, PinnedEvent, STATUS_CONFIG } from '../types';
 import { ChannelBadge } from './ChannelBadge';
@@ -8,6 +8,7 @@ import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 interface Props {
   idea: Idea;
   event?: PinnedEvent;
+  onPress?: () => void;
 }
 
 function getTimeAgo(date: Date): string {
@@ -21,12 +22,12 @@ function getTimeAgo(date: Date): string {
   return `hace ${days}d`;
 }
 
-export const IdeaCard: React.FC<Props> = ({ idea, event }) => {
+export const IdeaCard: React.FC<Props> = ({ idea, event, onPress }) => {
   const statusConfig = STATUS_CONFIG[idea.status];
   const timeAgo = getTimeAgo(idea.createdAt);
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
         <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + '20' }]}>
           <Ionicons name={statusConfig.icon as any} size={14} color={statusConfig.color} />
@@ -60,7 +61,7 @@ export const IdeaCard: React.FC<Props> = ({ idea, event }) => {
           <Text style={styles.aiText}>Gemini AI</Text>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
   );
 };
 
