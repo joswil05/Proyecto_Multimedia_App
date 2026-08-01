@@ -1,6 +1,15 @@
 export type Channel = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'whatsapp';
 
-export type IdeaStatus = 'banco' | 'idea' | 'script' | 'editing' | 'review' | 'ready';
+export interface AppUser {
+  uid: string;
+  name: string | null;
+  email: string | null;
+  photoURL: string | null;
+  teamId: string;
+  createdAt: number;
+}
+
+export type IdeaStatus = 'idea' | 'script' | 'editing' | 'review' | 'ready' | 'banco';
 
 export interface StatusConfig {
   label: string;

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { EventManagerModal } from '../components/EventManagerModal';
 import { EventDetailModal } from '../components/EventDetailModal';
 import { IdeaDetailModal } from '../components/IdeaDetailModal';
 import { useData } from '../context/DataContext';
+import { useAuth } from '../context/AuthContext';
 import { PinnedEvent } from '../types';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
@@ -24,6 +25,7 @@ export const HomeScreen: React.FC = () => {
     pinEvent,
     addIdea,
   } = useData();
+  const { signOut } = useAuth();
 
   // Modal states
   const [captureModalVisible, setCaptureModalVisible] = useState(false);
@@ -45,6 +47,19 @@ export const HomeScreen: React.FC = () => {
     setIdeaDetailVisible(true);
   };
 
+  const handleSettingsPress = () => {
+    Alert.alert(
+      'Ajustes',
+      '¿Qué deseas hacer?',
+      [
+        { text: 'Administrar Eventos', onPress: () => setEventManagerVisible(true) },
+        { text: 'Cerrar Sesión', style: 'destructive', onPress: signOut },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  };
+
   // ── List Components ────────────────────────────────────────────────
   const renderHeader = useCallback(
     () => (
@@ -61,7 +76,7 @@ export const HomeScreen: React.FC = () => {
             name="settings-outline"
             size={24}
             color={colors.textSecondary}
-            onPress={() => setEventManagerVisible(true)}
+            onPress={handleSettingsPress}
           />
         </View>
 

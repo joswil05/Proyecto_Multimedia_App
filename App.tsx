@@ -3,7 +3,9 @@ import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { DataProvider } from './src/context/DataContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
 import { CalendarScreen } from './src/screens/CalendarScreen';
 import { PipelineScreen } from './src/screens/PipelineScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
@@ -87,12 +89,34 @@ const MainTabs = () => {
   );
 };
 
+const RootNavigator = () => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.textSecondary }}>Cargando...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  return (
+    <DataProvider>
+      <MainTabs />
+    </DataProvider>
+  );
+};
+
 export default function App() {
   return (
     <SafeAreaProvider>
-      <DataProvider>
-        <MainTabs />
-      </DataProvider>
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

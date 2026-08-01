@@ -1,6 +1,9 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
-import { Idea, PinnedEvent } from '../types';
+import { Idea, PinnedEvent, AppUser } from '../types';
 import * as Notifications from 'expo-notifications';
+import { collection, onSnapshot, query, where, addDoc, updateDoc, doc, deleteDoc, setDoc } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from './AuthContext';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -15,6 +18,7 @@ Notifications.setNotificationHandler({
 interface DataContextProps {
   events: PinnedEvent[];
   ideas: Idea[];
+  teamMembers: AppUser[];
   pinnedEventId: string | null;
   addEvent: (event: Omit<PinnedEvent, 'id' | 'completedContent'>) => void;
   updateEvent: (eventId: string, updates: Partial<PinnedEvent>) => void;
@@ -30,10 +34,54 @@ interface DataContextProps {
 export const DataContext = createContext<DataContextProps | undefined>(undefined);
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
+  const { user } = useAuth();
   const [events, setEvents] = useState<PinnedEvent[]>([]);
   const [pinnedEventId, setPinnedEventId] = useState<string | null>(null);
   const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [teamMembers, setTeamMembers] = useState<AppUser[]>([]);
   const [globalSelectedIdeaId, setGlobalSelectedIdeaId] = useState<string | null>(null);
+
+  // Firestore Sync
+  React.useEffect(() => {
+    if (!user) {
+      setIdeas([]);
+      setEvents([]);
+      setTeamMembers([]);
+      return;
+    }
+
+    const ideasQuery = query(collection(db, 'ideas'), where('teamId', '==', user.teamId));
+    const unsubscribeIdeas = onSnapshot(ideasQuery, (snapshot) => {
+      const fetchedIdeas = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+          scheduledDate: data.scheduledDate ? new Date(data.scheduledDate) : undefined,
+        } as Idea;
+      });
+      setIdeas(fetchedIdeas);
+    });
+
+    const eventsQuery = query(collection(db, 'events'), where('teamId', '==', user.teamId));
+    const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
+      const fetchedEvents = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PinnedEvent));
+      setEvents(fetchedEvents);
+    });
+
+    const usersQuery = query(collection(db, 'users'), where('teamId', '==', user.teamId));
+    const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
+      const fetchedUsers = snapshot.docs.map(doc => doc.data() as AppUser);
+      setTeamMembers(fetchedUsers);
+    });
+
+    return () => {
+      unsubscribeIdeas();
+      unsubscribeEvents();
+      unsubscribeUsers();
+    };
+  }, [user]);
 
   // Pedir permisos al cargar
   React.useEffect(() => {
@@ -54,43 +102,42 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     return () => subscription.remove();
   }, []);
 
-  const addEvent = useCallback((newEvent: Omit<PinnedEvent, 'id' | 'completedContent'>) => {
-    const event: PinnedEvent = {
+  const addEvent = useCallback(async (newEvent: Omit<PinnedEvent, 'id' | 'completedContent'>) => {
+    if (!user) return;
+    const event = {
       ...newEvent,
-      id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       completedContent: 0,
+      teamId: user.teamId,
     };
-    setEvents((prev) => [...prev, event]);
-    setPinnedEventId(event.id);
+    await addDoc(collection(db, 'events'), event);
+  }, [user]);
+
+  const updateEvent = useCallback(async (eventId: string, updates: Partial<PinnedEvent>) => {
+    const eventRef = doc(db, 'events', eventId);
+    await updateDoc(eventRef, updates);
   }, []);
 
-  const updateEvent = useCallback((eventId: string, updates: Partial<PinnedEvent>) => {
-    setEvents((prev) =>
-      prev.map((evt) => (evt.id === eventId ? { ...evt, ...updates } : evt))
-    );
-  }, []);
-
-  const deleteEvent = useCallback((eventId: string) => {
-    setEvents((prev) => prev.filter((e) => e.id !== eventId));
-    setPinnedEventId((prev) => (prev === eventId ? null : prev));
-    setIdeas((prev) =>
-      prev.map((idea) => (idea.eventId === eventId ? { ...idea, eventId: undefined } : idea))
-    );
-  }, []);
+  const deleteEvent = useCallback(async (eventId: string) => {
+    const eventRef = doc(db, 'events', eventId);
+    await deleteDoc(eventRef);
+    if (pinnedEventId === eventId) setPinnedEventId(null);
+  }, [pinnedEventId]);
 
   const pinEvent = useCallback((eventId: string | null) => {
     setPinnedEventId(eventId);
   }, []);
 
-  const addIdea = useCallback((newIdea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => {
-    const idea: Idea = {
+  const addIdea = useCallback(async (newIdea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => {
+    if (!user) return;
+    const idea: any = {
       ...newIdea,
-      id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+      createdAt: Date.now(),
       status: 'banco',
       reviewStatus: 'evaluacion',
-      createdAt: new Date(),
+      teamId: user.teamId,
+      scheduledDate: newIdea.scheduledDate ? newIdea.scheduledDate.getTime() : null,
     };
-    // Simular hooks y copy si usa IA
+    
     if (idea.useAI) {
       idea.aiHooks = [
         `¿Sabías que ${idea.text.substring(0, 20)}...?`,
@@ -99,68 +146,74 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       ];
       idea.copyText = `Aquí tienes el borrador generado por IA para tu idea: "${idea.text}". ¡No olvides agregar emojis y llamados a la acción!`;
     }
-    setIdeas((prev) => [idea, ...prev]);
-  }, []);
+    
+    await addDoc(collection(db, 'ideas'), idea);
+  }, [user]);
 
   const updateIdea = useCallback((ideaId: string, updates: Partial<Idea>) => {
-    setIdeas((prev) =>
-      prev.map((idea) => {
-        if (idea.id === ideaId) {
-          const updatedIdea = { ...idea, ...updates };
+    const idea = ideas.find(i => i.id === ideaId);
+    if (!idea) return;
 
-          // Manage notifications if date or toggle changed
-          if (updates.scheduledDate !== undefined || updates.notifyPrior !== undefined) {
-            (async () => {
-              // Cancel existing notifications
-              if (idea.publishNotificationId) {
-                await Notifications.cancelScheduledNotificationAsync(idea.publishNotificationId);
-                updatedIdea.publishNotificationId = undefined;
-              }
-              if (idea.reminderNotificationId) {
-                await Notifications.cancelScheduledNotificationAsync(idea.reminderNotificationId);
-                updatedIdea.reminderNotificationId = undefined;
-              }
+    (async () => {
+      let updatedPublishId = idea.publishNotificationId;
+      let updatedReminderId = idea.reminderNotificationId;
 
-              if (updatedIdea.scheduledDate && updatedIdea.scheduledDate > new Date()) {
-                // 1. Publish Notification (Exact time)
-                const publishId = await Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: `🚀 Hora de publicar`,
-                    body: `${updatedIdea.text} para ${updatedIdea.channels.join(', ')}`,
-                    data: { ideaId: updatedIdea.id },
-                  },
-                  trigger: { date: updatedIdea.scheduledDate } as any,
-                });
-                updatedIdea.publishNotificationId = publishId;
-
-                // 2. Reminder Notification (1 hr before)
-                if (updatedIdea.notifyPrior) {
-                  const triggerDate = new Date(updatedIdea.scheduledDate.getTime() - 60 * 60 * 1000);
-                  if (triggerDate > new Date()) {
-                    const reminderId = await Notifications.scheduleNotificationAsync({
-                      content: {
-                        title: '🚀 Hora de prepararse',
-                        body: `Falta 1 hora para publicar: "${updatedIdea.text}"`,
-                        data: { ideaId: updatedIdea.id },
-                      },
-                      trigger: { date: triggerDate } as any,
-                    });
-                    updatedIdea.reminderNotificationId = reminderId;
-                  }
-                }
-              }
-            })();
-          }
-
-          return updatedIdea;
+      if (updates.scheduledDate !== undefined || updates.notifyPrior !== undefined) {
+        if (idea.publishNotificationId) {
+          await Notifications.cancelScheduledNotificationAsync(idea.publishNotificationId);
+          updatedPublishId = undefined;
         }
-        return idea;
-      })
-    );
-  }, []);
+        if (idea.reminderNotificationId) {
+          await Notifications.cancelScheduledNotificationAsync(idea.reminderNotificationId);
+          updatedReminderId = undefined;
+        }
 
-  const deleteIdea = useCallback((ideaId: string) => {
-    setIdeas((prev) => prev.filter((i) => i.id !== ideaId));
+        const notifyPrior = updates.notifyPrior !== undefined ? updates.notifyPrior : idea.notifyPrior;
+        const scheduledDate = updates.scheduledDate !== undefined ? updates.scheduledDate : idea.scheduledDate;
+
+        if (scheduledDate && scheduledDate > new Date()) {
+          const publishId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `🚀 Hora de publicar`,
+              body: `${updates.text || idea.text} para ${(updates.channels || idea.channels).join(', ')}`,
+              data: { ideaId: idea.id },
+            },
+            trigger: { date: scheduledDate } as any,
+          });
+          updatedPublishId = publishId;
+
+          if (notifyPrior) {
+            const triggerDate = new Date(scheduledDate.getTime() - 60 * 60 * 1000);
+            if (triggerDate > new Date()) {
+              const reminderId = await Notifications.scheduleNotificationAsync({
+                content: {
+                  title: '🚀 Hora de prepararse',
+                  body: `Falta 1 hora para publicar: "${updates.text || idea.text}"`,
+                  data: { ideaId: idea.id },
+                },
+                trigger: { date: triggerDate } as any,
+              });
+              updatedReminderId = reminderId;
+            }
+          }
+        }
+      }
+
+      const firestoreUpdates: any = { ...updates };
+      if (updates.scheduledDate !== undefined) {
+        firestoreUpdates.scheduledDate = updates.scheduledDate ? updates.scheduledDate.getTime() : null;
+      }
+      if (updatedPublishId !== undefined) firestoreUpdates.publishNotificationId = updatedPublishId;
+      if (updatedReminderId !== undefined) firestoreUpdates.reminderNotificationId = updatedReminderId;
+      
+      const ideaRef = doc(db, 'ideas', ideaId);
+      await updateDoc(ideaRef, firestoreUpdates);
+    })();
+  }, [ideas]);
+
+  const deleteIdea = useCallback(async (ideaId: string) => {
+    const ideaRef = doc(db, 'ideas', ideaId);
+    await deleteDoc(ideaRef);
   }, []);
 
   return (
@@ -168,6 +221,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       value={{
         events,
         ideas,
+        teamMembers,
         pinnedEventId,
         addEvent,
         updateEvent,

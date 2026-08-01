@@ -30,10 +30,9 @@ const PIPELINE_STATUSES: IdeaStatus[] = ['idea', 'script', 'editing', 'review', 
 const REVIEW_STATUSES = ['evaluacion', 'ajustes', 'aprobada', 'archivada'] as const;
 const PRIORITIES = ['alta', 'media', 'baja'] as const;
 const COMPLEXITIES = ['rapida', 'media', 'compleja'] as const;
-const TEAM_MEMBERS = ['@Joswill', '@Maria', '@Carlos', '@Ana'];
 
 export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) => {
-  const { ideas, events, updateIdea, deleteIdea } = useData();
+  const { ideas, events, teamMembers, updateIdea, deleteIdea } = useData();
   const idea = ideas.find((i) => i.id === ideaId);
 
   // States
@@ -332,20 +331,23 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             <View style={[styles.section, { flex: 1 }]}>
               <Text style={styles.sectionTitle}>Responsable</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                {TEAM_MEMBERS.map((member) => (
-                  <TouchableOpacity
-                    key={member}
-                    style={[
-                      styles.memberBadge,
-                      idea.assignedTo === member && styles.memberBadgeActive
-                    ]}
-                    onPress={() => updateIdea(idea.id, { assignedTo: member })}
-                  >
-                    <Text style={[styles.memberText, idea.assignedTo === member && styles.memberTextActive]}>
-                      {member}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {teamMembers.map((member) => {
+                  const displayName = member.name || member.email || 'Desconocido';
+                  return (
+                    <TouchableOpacity
+                      key={member.uid}
+                      style={[
+                        styles.memberBadge,
+                        idea.assignedTo === displayName && styles.memberBadgeActive
+                      ]}
+                      onPress={() => updateIdea(idea.id, { assignedTo: displayName })}
+                    >
+                      <Text style={[styles.memberText, idea.assignedTo === displayName && styles.memberTextActive]}>
+                        {displayName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </ScrollView>
             </View>
           </View>
