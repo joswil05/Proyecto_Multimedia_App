@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Alert,
   Linking,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -26,6 +27,9 @@ interface Props {
 }
 
 const PIPELINE_STATUSES: IdeaStatus[] = ['idea', 'script', 'editing', 'review', 'ready'];
+const REVIEW_STATUSES = ['evaluacion', 'ajustes', 'aprobada', 'archivada'] as const;
+const PRIORITIES = ['alta', 'media', 'baja'] as const;
+const COMPLEXITIES = ['rapida', 'media', 'compleja'] as const;
 const TEAM_MEMBERS = ['@Joswill', '@Maria', '@Carlos', '@Ana'];
 
 export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) => {
@@ -43,6 +47,9 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
   const [linkDrive, setLinkDrive] = useState('');
   const [linkAudio, setLinkAudio] = useState('');
 
+  // Meeting Notes
+  const [meetingNotes, setMeetingNotes] = useState('');
+
   useEffect(() => {
     if (idea) {
       setCopyText(idea.copyText || '');
@@ -50,6 +57,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
       setLinkCapCut(idea.productionLinks?.capcut || '');
       setLinkDrive(idea.productionLinks?.drive || '');
       setLinkAudio(idea.productionLinks?.audio || '');
+      setMeetingNotes(idea.meetingNotes || '');
     }
   }, [idea]);
 
@@ -72,6 +80,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
     updateIdea(idea.id, {
       copyText,
       scriptText,
+      meetingNotes,
       productionLinks: {
         capcut: linkCapCut,
         drive: linkDrive,
@@ -169,52 +178,152 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             </View>
           )}
 
-          {/* Pipeline */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Estado (Pipeline)</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
-              {PIPELINE_STATUSES.map((status) => {
-                const config = STATUS_CONFIG[status];
-                const isActive = idea.status === status;
-                return (
-                  <TouchableOpacity
-                    key={status}
-                    style={[
-                      styles.pipelineChip,
-                      isActive && { backgroundColor: config.color, borderColor: config.color },
-                    ]}
-                    onPress={() => handleStatusChange(status)}
-                  >
-                    <Ionicons
-                      name={config.icon as any}
-                      size={16}
-                      color={isActive ? colors.background : config.color}
-                    />
-                    <Text style={[styles.pipelineText, isActive && { color: colors.background }]}>
-                      {config.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
+          {idea.status === 'banco' ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Revisión Editorial</Text>
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
+                {REVIEW_STATUSES.map((status) => {
+                  const isActive = idea.reviewStatus === status;
+                  return (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.pipelineChip,
+                        isActive && { backgroundColor: colors.accent, borderColor: colors.accent },
+                      ]}
+                      onPress={() => updateIdea(idea.id, { reviewStatus: status })}
+                    >
+                      <Ionicons
+                        name={status === 'evaluacion' ? 'search-outline' : status === 'ajustes' ? 'construct-outline' : status === 'aprobada' ? 'checkmark-circle-outline' : 'archive-outline'}
+                        size={16}
+                        color={isActive ? colors.background : colors.textPrimary}
+                      />
+                      <Text style={[styles.pipelineText, isActive && { color: colors.background }]}>
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.rowSection}>
+                <View style={[styles.section, { flex: 1 }]}>
+                  <Text style={styles.sectionTitle}>Prioridad</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                    {PRIORITIES.map((pri) => (
+                      <TouchableOpacity
+                        key={pri}
+                        style={[styles.memberBadge, idea.priority === pri && styles.memberBadgeActive]}
+                        onPress={() => updateIdea(idea.id, { priority: pri })}
+                      >
+                        <Ionicons name="flash-outline" size={14} color={idea.priority === pri ? colors.accentLight : colors.textSecondary} style={{ marginRight: 4 }} />
+                        <Text style={[styles.memberText, idea.priority === pri && styles.memberTextActive]}>{pri}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={[styles.section, { flex: 1 }]}>
+                  <Text style={styles.sectionTitle}>Dificultad</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                    {COMPLEXITIES.map((comp) => (
+                      <TouchableOpacity
+                        key={comp}
+                        style={[styles.memberBadge, idea.complexity === comp && styles.memberBadgeActive]}
+                        onPress={() => updateIdea(idea.id, { complexity: comp })}
+                      >
+                        <Ionicons name={comp === 'rapida' ? 'time-outline' : comp === 'media' ? 'construct-outline' : 'alert-circle-outline'} size={14} color={idea.complexity === comp ? colors.accentLight : colors.textSecondary} style={{ marginRight: 4 }} />
+                        <Text style={[styles.memberText, idea.complexity === comp && styles.memberTextActive]}>{comp}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+
+              <Text style={styles.sectionTitle}>Notas de la Reunión</Text>
+              <TextInput
+                style={styles.textArea}
+                multiline
+                value={meetingNotes}
+                onChangeText={setMeetingNotes}
+                placeholder="Anotaciones de la junta editorial..."
+                placeholderTextColor={colors.textMuted}
+                onBlur={saveTextsAndLinks}
+              />
+
+              <TouchableOpacity 
+                style={styles.approveButton}
+                onPress={() => updateIdea(idea.id, { status: 'idea' })}
+              >
+                <Ionicons name="rocket-outline" size={24} color={colors.background} />
+                <Text style={styles.approveButtonText}>Aprobar e Iniciar Producción</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Estado (Pipeline)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
+                {PIPELINE_STATUSES.map((status) => {
+                  const config = STATUS_CONFIG[status];
+                  const isActive = idea.status === status;
+                  return (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.pipelineChip,
+                        isActive && { backgroundColor: config.color, borderColor: config.color },
+                      ]}
+                      onPress={() => handleStatusChange(status)}
+                    >
+                      <Ionicons
+                        name={config.icon as any}
+                        size={16}
+                        color={isActive ? colors.background : config.color}
+                      />
+                      <Text style={[styles.pipelineText, isActive && { color: colors.background }]}>
+                        {config.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           {/* Asignación y Fecha */}
           <View style={styles.rowSection}>
-            <View style={[styles.section, { flex: 1 }]}>
+            <View style={[styles.section, { flex: 1.5 }]}>
               <Text style={styles.sectionTitle}>Fecha Programada</Text>
-              <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
-                <Ionicons name="calendar-outline" size={20} color={colors.textPrimary} />
-                <Text style={styles.dateText}>
-                  {idea.scheduledDate
-                    ? idea.scheduledDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
-                    : 'Sin fecha'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.datePickerContainer}>
+                <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+                  <Ionicons name="calendar-outline" size={20} color={colors.textPrimary} />
+                  <Text style={styles.dateText}>
+                    {idea.scheduledDate
+                      ? idea.scheduledDate.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                      : 'Sin fecha'}
+                  </Text>
+                </TouchableOpacity>
+                
+                {idea.scheduledDate && (
+                  <View style={styles.notifySwitchContainer}>
+                    <Ionicons name="notifications-outline" size={16} color={colors.textSecondary} />
+                    <Text style={styles.notifySwitchLabel}>-1 hr</Text>
+                    <Switch
+                      value={!!idea.notifyPrior}
+                      onValueChange={(val) => updateIdea(idea.id, { notifyPrior: val })}
+                      trackColor={{ false: colors.surfaceBright, true: colors.accentLight }}
+                      thumbColor={idea.notifyPrior ? colors.accent : colors.textMuted}
+                      style={{ transform: [{ scaleX: 0.7 }, { scaleY: 0.7 }] }}
+                    />
+                  </View>
+                )}
+              </View>
+
               {showDatePicker && (
                 <DateTimePicker
                   value={idea.scheduledDate || new Date()}
-                  mode="date"
+                  mode="datetime"
                   display="default"
                   onChange={handleDateChange}
                 />
@@ -657,5 +766,34 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontSize: fontSize.md,
     fontWeight: '600',
+  },
+  approveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.accent,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  approveButtonText: {
+    color: colors.background,
+    fontSize: fontSize.lg,
+    fontWeight: '700',
+  },
+  datePickerContainer: {
+    flexDirection: 'column',
+    gap: spacing.sm,
+  },
+  notifySwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  notifySwitchLabel: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    flex: 1,
   },
 });

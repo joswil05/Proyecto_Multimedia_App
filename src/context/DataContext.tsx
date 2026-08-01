@@ -1,5 +1,16 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
 import { Idea, PinnedEvent } from '../types';
+import * as Notifications from 'expo-notifications';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 interface DataContextProps {
   events: PinnedEvent[];
@@ -12,6 +23,8 @@ interface DataContextProps {
   addIdea: (idea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => void;
   updateIdea: (ideaId: string, updates: Partial<Idea>) => void;
   deleteIdea: (ideaId: string) => void;
+  globalSelectedIdeaId: string | null;
+  setGlobalSelectedIdeaId: (ideaId: string | null) => void;
 }
 
 export const DataContext = createContext<DataContextProps | undefined>(undefined);
@@ -20,6 +33,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [events, setEvents] = useState<PinnedEvent[]>([]);
   const [pinnedEventId, setPinnedEventId] = useState<string | null>(null);
   const [ideas, setIdeas] = useState<Idea[]>([]);
+  const [globalSelectedIdeaId, setGlobalSelectedIdeaId] = useState<string | null>(null);
+
+  // Pedir permisos al cargar
+  React.useEffect(() => {
+    (async () => {
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Permisos de notificación denegados');
+      }
+    })();
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const ideaId = response.notification.request.content.data?.ideaId;
+      if (ideaId && typeof ideaId === 'string') {
+        setGlobalSelectedIdeaId(ideaId);
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const addEvent = useCallback((newEvent: Omit<PinnedEvent, 'id' | 'completedContent'>) => {
     const event: PinnedEvent = {
@@ -53,7 +86,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const idea: Idea = {
       ...newIdea,
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      status: 'idea',
+      status: 'banco',
+      reviewStatus: 'evaluacion',
       createdAt: new Date(),
     };
     // Simular hooks y copy si usa IA
@@ -73,6 +107,51 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       prev.map((idea) => {
         if (idea.id === ideaId) {
           const updatedIdea = { ...idea, ...updates };
+
+          // Manage notifications if date or toggle changed
+          if (updates.scheduledDate !== undefined || updates.notifyPrior !== undefined) {
+            (async () => {
+              // Cancel existing notifications
+              if (idea.publishNotificationId) {
+                await Notifications.cancelScheduledNotificationAsync(idea.publishNotificationId);
+                updatedIdea.publishNotificationId = undefined;
+              }
+              if (idea.reminderNotificationId) {
+                await Notifications.cancelScheduledNotificationAsync(idea.reminderNotificationId);
+                updatedIdea.reminderNotificationId = undefined;
+              }
+
+              if (updatedIdea.scheduledDate && updatedIdea.scheduledDate > new Date()) {
+                // 1. Publish Notification (Exact time)
+                const publishId = await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: `🚀 Hora de publicar`,
+                    body: `${updatedIdea.text} para ${updatedIdea.channels.join(', ')}`,
+                    data: { ideaId: updatedIdea.id },
+                  },
+                  trigger: { date: updatedIdea.scheduledDate } as any,
+                });
+                updatedIdea.publishNotificationId = publishId;
+
+                // 2. Reminder Notification (1 hr before)
+                if (updatedIdea.notifyPrior) {
+                  const triggerDate = new Date(updatedIdea.scheduledDate.getTime() - 60 * 60 * 1000);
+                  if (triggerDate > new Date()) {
+                    const reminderId = await Notifications.scheduleNotificationAsync({
+                      content: {
+                        title: '🚀 Hora de prepararse',
+                        body: `Falta 1 hora para publicar: "${updatedIdea.text}"`,
+                        data: { ideaId: updatedIdea.id },
+                      },
+                      trigger: { date: triggerDate } as any,
+                    });
+                    updatedIdea.reminderNotificationId = reminderId;
+                  }
+                }
+              }
+            })();
+          }
+
           return updatedIdea;
         }
         return idea;
@@ -97,6 +176,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         addIdea,
         updateIdea,
         deleteIdea,
+        globalSelectedIdeaId,
+        setGlobalSelectedIdeaId,
       }}
     >
       {children}

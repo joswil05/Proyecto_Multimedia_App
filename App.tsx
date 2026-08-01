@@ -7,11 +7,14 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { CalendarScreen } from './src/screens/CalendarScreen';
 import { PipelineScreen } from './src/screens/PipelineScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
+import { IdeaDetailModal } from './src/components/IdeaDetailModal';
+import { useData } from './src/context/DataContext';
 import { colors, spacing, fontSize, borderRadius } from './src/constants/theme';
 
 type TabType = 'home' | 'pipeline' | 'calendar' | 'events';
 
 const MainTabs = () => {
+  const { globalSelectedIdeaId, setGlobalSelectedIdeaId } = useData();
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const insets = useSafeAreaInsets();
 
@@ -71,6 +74,15 @@ const MainTabs = () => {
         </TouchableOpacity>
 
       </View>
+
+      {/* Global Idea Detail Modal for Notifications */}
+      {globalSelectedIdeaId !== null && (
+        <IdeaDetailModal
+          visible={globalSelectedIdeaId !== null}
+          onClose={() => setGlobalSelectedIdeaId(null)}
+          ideaId={globalSelectedIdeaId}
+        />
+      )}
     </View>
   );
 };

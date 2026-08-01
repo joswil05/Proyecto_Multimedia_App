@@ -1,6 +1,6 @@
 export type Channel = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'whatsapp';
 
-export type IdeaStatus = 'idea' | 'script' | 'editing' | 'review' | 'ready';
+export type IdeaStatus = 'banco' | 'idea' | 'script' | 'editing' | 'review' | 'ready';
 
 export interface StatusConfig {
   label: string;
@@ -9,6 +9,7 @@ export interface StatusConfig {
 }
 
 export const STATUS_CONFIG: Record<IdeaStatus, StatusConfig> = {
+  banco: { label: 'Banco de Ideas', icon: 'cube-outline', color: '#6B7280' },
   idea: { label: 'Idea', icon: 'bulb-outline', color: '#F59E0B' },
   script: { label: 'Guión', icon: 'document-text-outline', color: '#3B82F6' },
   editing: { label: 'Edición', icon: 'videocam-outline', color: '#8B5CF6' },
@@ -49,4 +50,12 @@ export interface Idea {
     completed: boolean;
   }[];
   assignedTo?: string;
+  reviewStatus?: 'evaluacion' | 'ajustes' | 'aprobada' | 'archivada';
+  meetingNotes?: string;
+  priority?: 'alta' | 'media' | 'baja';
+  complexity?: 'rapida' | 'media' | 'compleja';
+  isArchived?: boolean;
+  notifyPrior?: boolean;
+  publishNotificationId?: string;
+  reminderNotificationId?: string;
 }
