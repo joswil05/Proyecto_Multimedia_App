@@ -1,14 +1,35 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { PinnedEvent } from '../types';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
 interface Props {
-  event: PinnedEvent;
+  event: PinnedEvent | null;
+  onManageEvents: () => void;
 }
 
-export const PinnedEventBanner: React.FC<Props> = ({ event }) => {
+export const PinnedEventBanner: React.FC<Props> = ({ event, onManageEvents }) => {
+  // ── Empty State ──────────────────────────────────────────────────────
+  if (!event) {
+    return (
+      <TouchableOpacity
+        style={styles.emptyContainer}
+        onPress={onManageEvents}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="calendar-outline" size={36} color={colors.textMuted} />
+        <Text style={styles.emptyTitle}>Sin evento fijado actualmente</Text>
+        <View style={styles.createButton}>
+          <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
+          <Text style={styles.createButtonText}>Crear Evento Especial</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // ── Active Event ─────────────────────────────────────────────────────
   const daysLeft = Math.max(
     0,
     Math.ceil((event.targetDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -17,16 +38,27 @@ export const PinnedEventBanner: React.FC<Props> = ({ event }) => {
 
   return (
     <LinearGradient
-      colors={[colors.gradientStart, colors.gradientEnd]}
+      colors={event.gradientColors}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}
     >
       <View style={styles.header}>
-        <Text style={styles.emoji}>{event.emoji}</Text>
-        <View style={styles.countdown}>
-          <Text style={styles.daysNumber}>{daysLeft}</Text>
-          <Text style={styles.daysLabel}>días</Text>
+        <View style={styles.iconContainer}>
+          <Ionicons name={event.icon as any} size={28} color="#FFFFFF" />
+        </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={onManageEvents}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="swap-horizontal-outline" size={18} color="rgba(255,255,255,0.8)" />
+          </TouchableOpacity>
+          <View style={styles.countdown}>
+            <Text style={styles.daysNumber}>{daysLeft}</Text>
+            <Text style={styles.daysLabel}>días</Text>
+          </View>
         </View>
       </View>
 
@@ -45,6 +77,7 @@ export const PinnedEventBanner: React.FC<Props> = ({ event }) => {
 };
 
 const styles = StyleSheet.create({
+  // Active state
   container: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.md,
@@ -54,11 +87,28 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.sm,
   },
-  emoji: {
-    fontSize: 36,
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  settingsButton: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   countdown: {
     alignItems: 'center',
@@ -102,5 +152,34 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '500',
+  },
+  // Empty state
+  emptyContainer: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.lg,
+    padding: spacing.xxl,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: fontSize.md,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  createButtonText: {
+    fontSize: fontSize.sm,
+    color: colors.accent,
+    fontWeight: '600',
   },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Idea, STATUS_CONFIG } from '../types';
 import { ChannelBadge } from './ChannelBadge';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
@@ -27,7 +28,7 @@ export const IdeaCard: React.FC<Props> = ({ idea }) => {
     <View style={styles.card}>
       <View style={styles.header}>
         <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + '20' }]}>
-          <Text style={styles.statusEmoji}>{statusConfig.emoji}</Text>
+          <Ionicons name={statusConfig.icon as any} size={14} color={statusConfig.color} />
           <Text style={[styles.statusText, { color: statusConfig.color }]}>
             {statusConfig.label}
           </Text>
@@ -47,7 +48,8 @@ export const IdeaCard: React.FC<Props> = ({ idea }) => {
 
       {idea.useAI && (
         <View style={styles.aiIndicator}>
-          <Text style={styles.aiText}>✨ Gemini AI</Text>
+          <Ionicons name="sparkles-outline" size={12} color={colors.accentLight} />
+          <Text style={styles.aiText}>Gemini AI</Text>
         </View>
       )}
     </View>
@@ -78,9 +80,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     gap: 4,
   },
-  statusEmoji: {
-    fontSize: 12,
-  },
   statusText: {
     fontSize: fontSize.xs,
     fontWeight: '600',
@@ -101,6 +100,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   aiIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     marginTop: spacing.sm,
     alignSelf: 'flex-start',
   },

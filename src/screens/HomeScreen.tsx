@@ -2,86 +2,100 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { PinnedEventBanner } from '../components/PinnedEventBanner';
 import { IdeaCard } from '../components/IdeaCard';
 import { FloatingActionButton } from '../components/FloatingActionButton';
 import { QuickCaptureModal } from '../components/QuickCaptureModal';
+import { EventManagerModal } from '../components/EventManagerModal';
 import { Idea, PinnedEvent } from '../types';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
-// ── Mock Data ──────────────────────────────────────────────────────────
-const MOCK_EVENT: PinnedEvent = {
-  id: 'evt-1',
-  title: 'Campamento de Jóvenes 2026',
-  emoji: '🎪',
-  targetDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-  totalContentGoal: 10,
-  completedContent: 3,
-};
-
-const INITIAL_IDEAS: Idea[] = [
-  {
-    id: '1',
-    text: 'Reel mostrando el countdown al campamento con música épica y transiciones rápidas',
-    channels: ['instagram', 'tiktok'],
-    status: 'idea',
-    eventId: 'evt-1',
-    useAI: true,
-    createdAt: new Date(Date.now() - 1800000),
-  },
-  {
-    id: '2',
-    text: 'Video testimonio de jóvenes del campamento pasado compartiendo su experiencia y cómo les cambió la vida',
-    channels: ['youtube', 'facebook'],
-    status: 'idea',
-    useAI: false,
-    createdAt: new Date(Date.now() - 7200000),
-  },
-  {
-    id: '3',
-    text: 'Carrusel con tips para prepararse al campamento: qué llevar, horarios y actividades',
-    channels: ['instagram', 'facebook', 'whatsapp'],
-    status: 'idea',
-    eventId: 'evt-1',
-    useAI: true,
-    createdAt: new Date(Date.now() - 86400000),
-  },
-];
-
 // ── Component ──────────────────────────────────────────────────────────
 export const HomeScreen: React.FC = () => {
-  const [ideas, setIdeas] = useState<Idea[]>(INITIAL_IDEAS);
-  const [modalVisible, setModalVisible] = useState(false);
+  // Events state
+  const [events, setEvents] = useState<PinnedEvent[]>([]);
+  const [pinnedEventId, setPinnedEventId] = useState<string | null>(null);
 
-  const handleSaveIdea = useCallback(
-    (newIdea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => {
-      const idea: Idea = {
-        ...newIdea,
-        id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-        status: 'idea',
-        createdAt: new Date(),
+  // Ideas state
+  const [ideas, setIdeas] = useState<Idea[]>([]);
+
+  // Modal states
+  const [captureModalVisible, setCaptureModalVisible] = useState(false);
+  const [eventManagerVisible, setEventManagerVisible] = useState(false);
+
+  // Derived
+  const pinnedEvent = events.find((e) => e.id === pinnedEventId) || null;
+
+  // ── Event Handlers ─────────────────────────────────────────────────
+  const handleCreateEvent = useCallback(
+    (newEvent: Omit<PinnedEvent, 'id' | 'completedContent'>) => {
+      const event: PinnedEvent = {
+        ...newEvent,
+        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        completedContent: 0,
       };
-      setIdeas((prev) => [idea, ...prev]);
-      setModalVisible(false);
+      setEvents((prev) => [...prev, event]);
+      setPinnedEventId(event.id);
+      setEventManagerVisible(false);
     },
     []
   );
 
+  const handlePinEvent = useCallback((eventId: string | null) => {
+    setPinnedEventId(eventId);
+  }, []);
+
+  const handleDeleteEvent = useCallback(
+    (eventId: string) => {
+      setEvents((prev) => prev.filter((e) => e.id !== eventId));
+      if (pinnedEventId === eventId) {
+        setPinnedEventId(null);
+      }
+      // Unlink ideas from deleted event
+      setIdeas((prev) =>
+        prev.map((idea) =>
+          idea.eventId === eventId ? { ...idea, eventId: undefined } : idea
+        )
+      );
+    },
+    [pinnedEventId]
+  );
+
+  // ── Idea Handlers ──────────────────────────────────────────────────
+  const handleSaveIdea = useCallback(
+    (newIdea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => {
+      const idea: Idea = {
+        ...newIdea,
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        status: 'idea',
+        createdAt: new Date(),
+      };
+      setIdeas((prev) => [idea, ...prev]);
+      setCaptureModalVisible(false);
+    },
+    []
+  );
+
+  // ── List Components ────────────────────────────────────────────────
   const renderHeader = useCallback(
     () => (
       <>
-        {/* App Header */}
         <View style={styles.appHeader}>
           <View>
             <Text style={styles.appTitle}>Content OS</Text>
-            <Text style={styles.orgName}>📡 Equipo de Medios</Text>
+            <View style={styles.orgRow}>
+              <Ionicons name="people-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.orgName}>Equipo de Medios</Text>
+            </View>
           </View>
         </View>
 
-        {/* Pinned Event */}
-        <PinnedEventBanner event={MOCK_EVENT} />
+        <PinnedEventBanner
+          event={pinnedEvent}
+          onManageEvents={() => setEventManagerVisible(true)}
+        />
 
-        {/* Section Title */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Ideas Recientes</Text>
           <View style={styles.ideaCountBadge}>
@@ -90,13 +104,13 @@ export const HomeScreen: React.FC = () => {
         </View>
       </>
     ),
-    [ideas.length]
+    [pinnedEvent, ideas.length]
   );
 
   const renderEmptyState = useCallback(
     () => (
       <View style={styles.emptyState}>
-        <Text style={styles.emptyEmoji}>💡</Text>
+        <Ionicons name="bulb-outline" size={48} color={colors.textMuted} />
         <Text style={styles.emptyTitle}>Sin ideas aún</Text>
         <Text style={styles.emptySubtitle}>
           Toca el botón + para capturar tu primera idea
@@ -106,6 +120,7 @@ export const HomeScreen: React.FC = () => {
     []
   );
 
+  // ── Render ─────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
@@ -120,13 +135,24 @@ export const HomeScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       />
 
-      <FloatingActionButton onPress={() => setModalVisible(true)} />
+      <FloatingActionButton onPress={() => setCaptureModalVisible(true)} />
 
       <QuickCaptureModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
+        visible={captureModalVisible}
+        onClose={() => setCaptureModalVisible(false)}
         onSave={handleSaveIdea}
-        activeEvent={MOCK_EVENT}
+        events={events}
+        pinnedEventId={pinnedEventId}
+      />
+
+      <EventManagerModal
+        visible={eventManagerVisible}
+        onClose={() => setEventManagerVisible(false)}
+        events={events}
+        pinnedEventId={pinnedEventId}
+        onCreateEvent={handleCreateEvent}
+        onPinEvent={handlePinEvent}
+        onDeleteEvent={handleDeleteEvent}
       />
     </SafeAreaView>
   );
@@ -149,10 +175,15 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     letterSpacing: -0.5,
   },
+  orgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
   orgName: {
     fontSize: fontSize.sm,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -186,14 +217,11 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingHorizontal: spacing.xxxl,
   },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: spacing.lg,
-  },
   emptyTitle: {
     fontSize: fontSize.xl,
     fontWeight: '700',
     color: colors.textPrimary,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
   emptySubtitle: {

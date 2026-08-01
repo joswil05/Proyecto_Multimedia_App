@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Channel } from '../types';
 import { getChannelConfig } from '../constants/channels';
 import { spacing, borderRadius, fontSize } from '../constants/theme';
@@ -13,7 +14,7 @@ export const ChannelBadge: React.FC<Props> = ({ channel }) => {
 
   return (
     <View style={[styles.badge, { backgroundColor: config.color + '20' }]}>
-      <Text style={styles.icon}>{config.icon}</Text>
+      <Ionicons name={config.icon as any} size={12} color={config.color} />
       <Text style={[styles.label, { color: config.color }]}>{config.label}</Text>
     </View>
   );
@@ -27,9 +28,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
     gap: 4,
-  },
-  icon: {
-    fontSize: 10,
   },
   label: {
     fontSize: fontSize.xs,

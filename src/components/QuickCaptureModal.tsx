@@ -12,6 +12,7 @@ import {
   Platform,
   StyleSheet,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Channel, Idea, PinnedEvent } from '../types';
 import { CHANNELS } from '../constants/channels';
 import { ChannelChip } from './ChannelChip';
@@ -21,18 +22,20 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSave: (idea: Omit<Idea, 'id' | 'createdAt' | 'status'>) => void;
-  activeEvent: PinnedEvent | null;
+  events: PinnedEvent[];
+  pinnedEventId: string | null;
 }
 
 export const QuickCaptureModal: React.FC<Props> = ({
   visible,
   onClose,
   onSave,
-  activeEvent,
+  events,
+  pinnedEventId,
 }) => {
   const [text, setText] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
-  const [linkToEvent, setLinkToEvent] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [useAI, setUseAI] = useState(true);
 
   const toggleChannel = (channel: Channel) => {
@@ -43,59 +46,52 @@ export const QuickCaptureModal: React.FC<Props> = ({
     );
   };
 
-  const handleSave = () => {
-    if (!text.trim()) return;
-
-    onSave({
-      text: text.trim(),
-      channels: selectedChannels,
-      eventId: linkToEvent && activeEvent ? activeEvent.id : undefined,
-      useAI,
-    });
-
-    // Reset form
+  const resetForm = () => {
     setText('');
     setSelectedChannels([]);
-    setLinkToEvent(false);
+    setSelectedEventId(null);
     setUseAI(true);
   };
 
+  const handleSave = () => {
+    if (!text.trim()) return;
+    onSave({
+      text: text.trim(),
+      channels: selectedChannels,
+      eventId: selectedEventId || undefined,
+      useAI,
+    });
+    resetForm();
+  };
+
   const handleClose = () => {
-    setText('');
-    setSelectedChannels([]);
-    setLinkToEvent(false);
-    setUseAI(true);
+    resetForm();
     onClose();
   };
 
   const canSave = text.trim().length > 0;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalContainer}
       >
-        {/* Backdrop */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        {/* Bottom Sheet */}
         <View style={styles.sheet}>
-          {/* Handle Bar */}
           <View style={styles.handleBar} />
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.headerTitle}>💡 Nueva Idea</Text>
+            <View style={styles.headerTitleRow}>
+              <Ionicons name="bulb-outline" size={22} color={colors.warning} />
+              <Text style={styles.headerTitle}>Nueva Idea</Text>
+            </View>
             <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-              <Text style={styles.closeText}>✕</Text>
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -118,32 +114,72 @@ export const QuickCaptureModal: React.FC<Props> = ({
               autoFocus
             />
 
-            {/* Link to Event */}
-            {activeEvent && (
-              <TouchableOpacity
-                style={[
-                  styles.eventLink,
-                  linkToEvent && styles.eventLinkActive,
-                ]}
-                onPress={() => setLinkToEvent(!linkToEvent)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.eventEmoji}>{activeEvent.emoji}</Text>
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventLabel}>
-                    {linkToEvent ? 'Vinculada a:' : 'Vincular a evento:'}
-                  </Text>
-                  <Text style={styles.eventTitle}>{activeEvent.title}</Text>
-                </View>
-                <View
-                  style={[
-                    styles.eventCheck,
-                    linkToEvent && styles.eventCheckActive,
-                  ]}
+            {/* Dynamic Event Selector */}
+            {events.length > 0 && (
+              <>
+                <Text style={styles.sectionLabel}>Vincular a evento</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.eventScroll}
+                  contentContainerStyle={styles.eventScrollContent}
                 >
-                  {linkToEvent && <Text style={styles.checkmark}>✓</Text>}
-                </View>
-              </TouchableOpacity>
+                  {/* "No event" option */}
+                  <TouchableOpacity
+                    style={[styles.eventChip, !selectedEventId && styles.eventChipNone]}
+                    onPress={() => setSelectedEventId(null)}
+                  >
+                    <Ionicons
+                      name="remove-circle-outline"
+                      size={16}
+                      color={!selectedEventId ? colors.textPrimary : colors.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.eventChipText,
+                        !selectedEventId && styles.eventChipTextActive,
+                      ]}
+                    >
+                      Sin evento
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Dynamic event list */}
+                  {events.map((evt) => (
+                    <TouchableOpacity
+                      key={evt.id}
+                      style={[
+                        styles.eventChip,
+                        selectedEventId === evt.id && {
+                          backgroundColor: evt.gradientColors[0] + '25',
+                          borderColor: evt.gradientColors[0],
+                        },
+                      ]}
+                      onPress={() => setSelectedEventId(evt.id)}
+                    >
+                      <Ionicons
+                        name={evt.icon as any}
+                        size={16}
+                        color={
+                          selectedEventId === evt.id
+                            ? evt.gradientColors[0]
+                            : colors.textMuted
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.eventChipText,
+                          selectedEventId === evt.id && {
+                            color: evt.gradientColors[0],
+                          },
+                        ]}
+                      >
+                        {evt.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
             )}
 
             {/* Channel Chips */}
@@ -162,7 +198,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
             {/* AI Switch */}
             <View style={styles.aiSwitch}>
               <View style={styles.aiSwitchInfo}>
-                <Text style={styles.aiSwitchEmoji}>✨</Text>
+                <Ionicons name="sparkles-outline" size={18} color={colors.accentLight} />
                 <Text style={styles.aiSwitchText}>
                   Generar ganchos y borrador con Gemini AI
                 </Text>
@@ -170,10 +206,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
               <Switch
                 value={useAI}
                 onValueChange={setUseAI}
-                trackColor={{
-                  false: colors.surfaceBright,
-                  true: colors.accentLight,
-                }}
+                trackColor={{ false: colors.surfaceBright, true: colors.accentLight }}
                 thumbColor={useAI ? colors.accent : colors.textMuted}
                 ios_backgroundColor={colors.surfaceBright}
               />
@@ -187,13 +220,15 @@ export const QuickCaptureModal: React.FC<Props> = ({
             disabled={!canSave}
             activeOpacity={0.8}
           >
+            <Ionicons
+              name="bookmark-outline"
+              size={20}
+              color={canSave ? '#FFFFFF' : colors.textMuted}
+            />
             <Text
-              style={[
-                styles.saveButtonText,
-                !canSave && styles.saveButtonTextDisabled,
-              ]}
+              style={[styles.saveButtonText, !canSave && styles.saveButtonTextDisabled]}
             >
-              💾 Guardar Idea
+              Guardar Idea
             </Text>
           </TouchableOpacity>
         </View>
@@ -203,13 +238,8 @@ export const QuickCaptureModal: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: colors.overlay,
-  },
+  modalContainer: { flex: 1 },
+  backdrop: { flex: 1, backgroundColor: colors.overlay },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: borderRadius.xl,
@@ -232,6 +262,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   headerTitle: {
     fontSize: fontSize.xl,
     fontWeight: '700',
@@ -245,14 +280,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '600',
-  },
-  content: {
-    paddingHorizontal: spacing.xl,
-  },
+  content: { paddingHorizontal: spacing.xl },
   textInput: {
     backgroundColor: colors.surfaceElevated,
     borderRadius: borderRadius.md,
@@ -264,55 +292,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: spacing.lg,
   },
-  eventLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surfaceElevated,
-    borderRadius: borderRadius.md,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.lg,
-    gap: spacing.md,
-  },
-  eventLinkActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSubtle,
-  },
-  eventEmoji: {
-    fontSize: 24,
-  },
-  eventInfo: {
-    flex: 1,
-  },
-  eventLabel: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginBottom: 2,
-  },
-  eventTitle: {
-    fontSize: fontSize.md,
-    color: colors.textPrimary,
-    fontWeight: '600',
-  },
-  eventCheck: {
-    width: 24,
-    height: 24,
-    borderRadius: borderRadius.full,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eventCheckActive: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  checkmark: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
   sectionLabel: {
     fontSize: fontSize.sm,
     color: colors.textSecondary,
@@ -321,6 +300,29 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  eventScroll: { marginBottom: spacing.xl },
+  eventScrollContent: { gap: spacing.sm, paddingRight: spacing.xl },
+  eventChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceElevated,
+    gap: 6,
+  },
+  eventChipNone: {
+    borderColor: colors.textPrimary,
+    backgroundColor: colors.surfaceBright,
+  },
+  eventChipText: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  eventChipTextActive: { color: colors.textPrimary },
   channelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -345,31 +347,27 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginRight: spacing.md,
   },
-  aiSwitchEmoji: {
-    fontSize: 18,
-  },
   aiSwitchText: {
     fontSize: fontSize.sm,
     color: colors.textPrimary,
     flex: 1,
   },
   saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
     backgroundColor: colors.accent,
     marginHorizontal: spacing.xl,
     marginTop: spacing.md,
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.md,
-    alignItems: 'center',
   },
-  saveButtonDisabled: {
-    backgroundColor: colors.surfaceElevated,
-  },
+  saveButtonDisabled: { backgroundColor: colors.surfaceElevated },
   saveButtonText: {
     fontSize: fontSize.lg,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  saveButtonTextDisabled: {
-    color: colors.textMuted,
-  },
+  saveButtonTextDisabled: { color: colors.textMuted },
 });

@@ -1,5 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { ChannelConfig } from '../constants/channels';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
 
@@ -21,7 +22,11 @@ export const ChannelChip: React.FC<Props> = ({ config, selected, onToggle }) => 
           : { backgroundColor: colors.surfaceElevated, borderColor: colors.border },
       ]}
     >
-      <Text style={styles.icon}>{config.icon}</Text>
+      <Ionicons
+        name={config.icon as any}
+        size={16}
+        color={selected ? config.color : colors.textMuted}
+      />
       <Text
         style={[
           styles.label,
@@ -43,9 +48,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     borderWidth: 1.5,
     gap: 6,
-  },
-  icon: {
-    fontSize: 14,
   },
   label: {
     fontSize: fontSize.sm,

@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { TouchableOpacity, Animated, StyleSheet, Text } from 'react-native';
+import { TouchableOpacity, Animated, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, borderRadius } from '../constants/theme';
 
@@ -40,7 +41,7 @@ export const FloatingActionButton: React.FC<Props> = ({ onPress }) => {
           end={{ x: 1, y: 1 }}
           style={styles.button}
         >
-          <Text style={styles.icon}>+</Text>
+          <Ionicons name="add" size={32} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
     </Animated.View>
@@ -64,11 +65,5 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  icon: {
-    fontSize: 32,
-    color: '#FFFFFF',
-    fontWeight: '300',
-    marginTop: -2,
   },
 });
