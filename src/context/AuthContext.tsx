@@ -3,6 +3,7 @@ import {
   onAuthStateChanged,
   signInWithCredential,
   GoogleAuthProvider,
+  OAuthProvider,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -10,6 +11,8 @@ import {
   GoogleSignin,
   isSuccessResponse,
 } from '@react-native-google-signin/google-signin';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { Platform } from 'react-native';
 import { auth, db } from '../config/firebase';
 import { AppUser } from '../types';
 
@@ -23,6 +26,7 @@ interface AuthContextProps {
   user: AppUser | null;
   loading: boolean;
   signInWithGoogle: () => void;
+  signInWithApple: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -86,6 +90,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const signInWithApple = async () => {
+    if (Platform.OS !== 'ios') return;
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      const { identityToken } = credential;
+      if (identityToken) {
+        const provider = new OAuthProvider('apple.com');
+        const authCredential = provider.credential({
+          idToken: identityToken,
+        });
+        await signInWithCredential(auth, authCredential);
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // user canceled
+      } else {
+        console.error('Apple Sign-In error:', error);
+      }
+    }
+  };
+
   const signOut = async () => {
     try {
       await GoogleSignin.signOut();
@@ -96,7 +126,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithApple, signOut }}>
       {children}
     </AuthContext.Provider>
   );

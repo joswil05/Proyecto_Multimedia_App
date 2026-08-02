@@ -32,7 +32,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.333003522153-placeholder"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

@@ -12,11 +12,12 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { PinnedEvent } from '../types';
 import { EVENT_GRADIENTS, EVENT_ICONS } from '../constants/events';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
+import { triggerSuccessHaptic, triggerSelectionHaptic } from '../utils/haptics';
 
 interface Props {
   visible: boolean;
@@ -72,6 +73,7 @@ export const EventManagerModal: React.FC<Props> = ({
   const handleSave = () => {
     if (!title.trim()) return;
 
+    triggerSuccessHaptic();
     onCreateEvent({
       title: title.trim(),
       icon: selectedIcon,
@@ -84,11 +86,23 @@ export const EventManagerModal: React.FC<Props> = ({
   };
 
   const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'ios') {
       setShowDatePicker(false);
     }
     if (selectedDate) {
       setDate(selectedDate);
+    }
+  };
+
+  const openDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: date,
+        onChange: onDateChange,
+        mode: 'date',
+      });
+    } else {
+      setShowDatePicker(true);
     }
   };
 
@@ -188,7 +202,7 @@ export const EventManagerModal: React.FC<Props> = ({
       <Text style={styles.fieldLabel}>Fecha del evento</Text>
       <TouchableOpacity
         style={styles.dateButton}
-        onPress={() => setShowDatePicker(true)}
+        onPress={openDatePicker}
         activeOpacity={0.7}
       >
         <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
@@ -196,11 +210,11 @@ export const EventManagerModal: React.FC<Props> = ({
         <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {showDatePicker && (
+      {showDatePicker && Platform.OS === 'ios' && (
         <DateTimePicker
           value={date}
           mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="spinner"
           onChange={onDateChange}
           minimumDate={new Date()}
           themeVariant="dark"
@@ -225,7 +239,7 @@ export const EventManagerModal: React.FC<Props> = ({
                 borderColor: selectedGradient.colors[0],
               },
             ]}
-            onPress={() => setSelectedIcon(icon)}
+            onPress={() => { triggerSelectionHaptic(); setSelectedIcon(icon); }}
           >
             <Ionicons
               name={icon as any}
@@ -251,7 +265,7 @@ export const EventManagerModal: React.FC<Props> = ({
               styles.colorOption,
               selectedGradient.id === gradient.id && styles.colorOptionSelected,
             ]}
-            onPress={() => setSelectedGradient(gradient)}
+            onPress={() => { triggerSelectionHaptic(); setSelectedGradient(gradient); }}
           >
             <View style={[styles.colorCircle, { backgroundColor: gradient.colors[0] }]} />
           </TouchableOpacity>
@@ -530,7 +544,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.accent,
+    backgroundColor: '#7C3AED',
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.md,
     marginTop: spacing.sm,

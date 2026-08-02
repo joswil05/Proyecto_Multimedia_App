@@ -51,8 +51,9 @@ export const FloatingActionButton: React.FC<Props> = ({ onPress }) => {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 32,
+    bottom: 24,
     right: 20,
+    zIndex: 10,
     shadowColor: colors.accent,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,

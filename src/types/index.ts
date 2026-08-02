@@ -1,4 +1,5 @@
 export type Channel = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'whatsapp';
+export type ContentPillar = 'educativo' | 'entretenimiento' | 'inspiracional' | 'promocional' | 'comunidad';
 
 export interface AppUser {
   uid: string;
@@ -46,7 +47,7 @@ export interface Idea {
   createdAt: Date;
   scheduledDate?: Date;
   copyText?: string;
-  aiHooks?: string[];
+  aiPolishData?: AIPolishData;
   scriptText?: string;
   productionLinks?: {
     capcut?: string;
@@ -67,4 +68,15 @@ export interface Idea {
   notifyPrior?: boolean;
   publishNotificationId?: string;
   reminderNotificationId?: string;
+  pillar?: ContentPillar;
+}
+
+export interface AIPolishData {
+  conceptAngles: {
+    title: string;
+    narrative: string;
+  }[];
+  recommendedFormat: string;
+  productionTip: string;
+  suggestedCaption: string;
 }

@@ -13,10 +13,13 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Channel, Idea, PinnedEvent } from '../types';
+import Animated, { SlideInUp, SlideOutDown } from 'react-native-reanimated';
+import { Channel, Idea, PinnedEvent, ContentPillar } from '../types';
 import { CHANNELS } from '../constants/channels';
+import { PILLARS_CONFIG } from '../constants/pillars';
 import { ChannelChip } from './ChannelChip';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
+import { triggerSuccessHaptic, triggerSelectionHaptic } from '../utils/haptics';
 
 interface Props {
   visible: boolean;
@@ -36,6 +39,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
   const [text, setText] = useState('');
   const [selectedChannels, setSelectedChannels] = useState<Channel[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(pinnedEventId);
+  const [selectedPillar, setSelectedPillar] = useState<ContentPillar | undefined>(undefined);
   const [useAI, setUseAI] = useState(true);
 
   useEffect(() => {
@@ -45,6 +49,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
   }, [visible, pinnedEventId]);
 
   const toggleChannel = (channel: Channel) => {
+    triggerSelectionHaptic();
     setSelectedChannels((prev) =>
       prev.includes(channel)
         ? prev.filter((c) => c !== channel)
@@ -56,16 +61,19 @@ export const QuickCaptureModal: React.FC<Props> = ({
     setText('');
     setSelectedChannels([]);
     setSelectedEventId(null);
+    setSelectedPillar(undefined);
     setUseAI(true);
   };
 
   const handleSave = () => {
     if (!text.trim()) return;
+    triggerSuccessHaptic();
     onSave({
       text: text.trim(),
       channels: selectedChannels,
       eventId: selectedEventId || undefined,
       useAI,
+      pillar: selectedPillar,
     });
     resetForm();
   };
@@ -78,7 +86,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
   const canSave = text.trim().length > 0;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalContainer}
@@ -87,7 +95,11 @@ export const QuickCaptureModal: React.FC<Props> = ({
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        <View style={styles.sheet}>
+        <Animated.View 
+          style={styles.sheet}
+          entering={SlideInUp.springify()} 
+          exiting={SlideOutDown.springify()}
+        >
           <View style={styles.handleBar} />
 
           {/* Header */}
@@ -133,7 +145,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
                   {/* "No event" option */}
                   <TouchableOpacity
                     style={[styles.eventChip, !selectedEventId && styles.eventChipNone]}
-                    onPress={() => setSelectedEventId(null)}
+                    onPress={() => { triggerSelectionHaptic(); setSelectedEventId(null); }}
                   >
                     <Ionicons
                       name="remove-circle-outline"
@@ -161,7 +173,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
                           borderColor: evt.gradientColors[0],
                         },
                       ]}
-                      onPress={() => setSelectedEventId(evt.id)}
+                      onPress={() => { triggerSelectionHaptic(); setSelectedEventId(evt.id); }}
                     >
                       <Ionicons
                         name={evt.icon as any}
@@ -188,6 +200,44 @@ export const QuickCaptureModal: React.FC<Props> = ({
               </>
             )}
 
+            {/* Pillar Chips */}
+            <Text style={styles.sectionLabel}>Pilar Estratégico</Text>
+            <View style={styles.pillarGrid}>
+              {(Object.entries(PILLARS_CONFIG) as [ContentPillar, typeof PILLARS_CONFIG[ContentPillar]][]).map(([key, config]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.eventChip,
+                    selectedPillar === key && {
+                      backgroundColor: config.color + '25',
+                      borderColor: config.color,
+                    },
+                  ]}
+                  onPress={() => { triggerSelectionHaptic(); setSelectedPillar(selectedPillar === key ? undefined : key); }}
+                >
+                  <Ionicons
+                    name={config.icon as any}
+                    size={16}
+                    color={
+                      selectedPillar === key
+                        ? config.color
+                        : colors.textMuted
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.eventChipText,
+                      selectedPillar === key && {
+                        color: config.color,
+                      },
+                    ]}
+                  >
+                    {config.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             {/* Channel Chips */}
             <Text style={styles.sectionLabel}>Canales de publicación</Text>
             <View style={styles.channelsGrid}>
@@ -211,7 +261,7 @@ export const QuickCaptureModal: React.FC<Props> = ({
               </View>
               <Switch
                 value={useAI}
-                onValueChange={setUseAI}
+                onValueChange={(val) => { triggerSelectionHaptic(); setUseAI(val); }}
                 trackColor={{ false: colors.surfaceBright, true: colors.accentLight }}
                 thumbColor={useAI ? colors.accent : colors.textMuted}
                 ios_backgroundColor={colors.surfaceBright}
@@ -237,15 +287,15 @@ export const QuickCaptureModal: React.FC<Props> = ({
               Guardar Idea
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalContainer: { flex: 1 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay },
+  modalContainer: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#09090B' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: '#09090B' },
   sheet: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: borderRadius.xl,
@@ -328,7 +378,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.textMuted,
   },
-  eventChipTextActive: { color: colors.textPrimary },
+  eventChipTextActive: {
+    color: colors.accentLight,
+    fontWeight: '700',
+  },
+  pillarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
   channelsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -363,7 +423,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    backgroundColor: colors.accent,
+    backgroundColor: '#7C3AED',
     marginHorizontal: spacing.xl,
     marginTop: spacing.md,
     paddingVertical: spacing.lg,

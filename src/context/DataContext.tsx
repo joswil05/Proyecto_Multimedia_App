@@ -1,5 +1,14 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
+
 import { Idea, PinnedEvent, AppUser } from '../types';
+
+// Helper function to convert Firestore Timestamp / numeric / string formats to JS Date
+const parseDate = (val: any): Date => {
+  if (!val) return new Date();
+  if (val.toDate && typeof val.toDate === 'function') return val.toDate(); // Firestore Timestamp
+  return new Date(val); // number or ISO string
+};
+
 // Mock for expo-notifications since it requires native module in dev build
 const Notifications: any = {
   setNotificationHandler: () => {},
@@ -55,8 +64,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         return {
           ...data,
           id: doc.id,
-          createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
-          scheduledDate: data.scheduledDate ? new Date(data.scheduledDate) : undefined,
+          createdAt: data.createdAt ? parseDate(data.createdAt) : new Date(),
+          scheduledDate: data.scheduledDate ? parseDate(data.scheduledDate) : undefined,
         } as Idea;
       });
       setIdeas(fetchedIdeas);
@@ -64,7 +73,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     const eventsQuery = query(collection(db, 'events'), where('teamId', '==', user.teamId));
     const unsubscribeEvents = onSnapshot(eventsQuery, (snapshot) => {
-      const fetchedEvents = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PinnedEvent));
+      const fetchedEvents = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          targetDate: data.targetDate ? parseDate(data.targetDate) : new Date(),
+        } as PinnedEvent;
+      });
       setEvents(fetchedEvents);
     });
 

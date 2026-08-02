@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Alert, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,8 +12,10 @@ import { EventDetailModal } from '../components/EventDetailModal';
 import { IdeaDetailModal } from '../components/IdeaDetailModal';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { PinnedEvent } from '../types';
+import { PinnedEvent, ContentPillar } from '../types';
+import { PILLARS_CONFIG } from '../constants/pillars';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
+import { triggerSelectionHaptic, triggerLightHaptic } from '../utils/haptics';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -35,6 +37,24 @@ export const HomeScreen: React.FC = () => {
   
   const [selectedEvent, setSelectedEvent] = useState<PinnedEvent | null>(null);
   const [selectedIdeaId, setSelectedIdeaId] = useState<string | null>(null);
+  const [filterPillar, setFilterPillar] = useState<ContentPillar | null>(null);
+
+  // Strategic Balance Calculations
+  const totalIdeas = ideas.length;
+  const pillarCounts = ideas.reduce((acc, idea) => {
+    if (idea.pillar) {
+      acc[idea.pillar] = (acc[idea.pillar] || 0) + 1;
+    } else {
+      acc.unassigned = (acc.unassigned || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  const promotionalCount = pillarCounts['promocional'] || 0;
+  const promotionalPercentage = totalIdeas > 0 ? (promotionalCount / totalIdeas) * 100 : 0;
+  const showPromoWarning = promotionalPercentage > 35;
+
+  const filteredIdeas = filterPillar ? ideas.filter(i => i.pillar === filterPillar) : ideas;
 
   // ── Handlers ─────────────────────────────────────────────────────────
   const handleEventPress = (event: PinnedEvent) => {
@@ -87,14 +107,72 @@ export const HomeScreen: React.FC = () => {
         />
 
         <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Balance Estratégico</Text>
+        </View>
+        
+        <View style={styles.balanceWidget}>
+          <View style={styles.balanceBar}>
+            {totalIdeas > 0 ? (
+              <>
+                {(Object.entries(PILLARS_CONFIG) as [ContentPillar, typeof PILLARS_CONFIG[ContentPillar]][]).map(([key, config]) => {
+                  const count = pillarCounts[key] || 0;
+                  if (count === 0) return null;
+                  return <View key={key} style={{ flex: count, backgroundColor: config.color, height: 8 }} />;
+                })}
+                {pillarCounts.unassigned > 0 && (
+                  <View style={{ flex: pillarCounts.unassigned, backgroundColor: colors.surfaceBright, height: 8 }} />
+                )}
+              </>
+            ) : (
+              <View style={{ flex: 1, backgroundColor: colors.surfaceBright, height: 8 }} />
+            )}
+          </View>
+          
+          <View style={styles.balanceStats}>
+            {(Object.entries(PILLARS_CONFIG) as [ContentPillar, typeof PILLARS_CONFIG[ContentPillar]][]).map(([key, config]) => {
+                const count = pillarCounts[key] || 0;
+                if (count === 0) return null;
+                const percentage = Math.round((count / totalIdeas) * 100);
+                return (
+                  <View key={key} style={styles.balanceStatItem}>
+                    <View style={[styles.balanceDot, { backgroundColor: config.color }]} />
+                    <Text style={styles.balanceStatText}>{percentage}% {config.label}</Text>
+                  </View>
+                );
+            })}
+          </View>
+          
+          {showPromoWarning && (
+            <View style={styles.promoWarning}>
+              <Ionicons name="warning" size={14} color={colors.warning} />
+              <Text style={styles.promoWarningText}>
+                Contenido promocional excede el 35% ({Math.round(promotionalPercentage)}%). Se recomienda balancear.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={[styles.sectionHeader, { marginTop: spacing.lg }]}>
           <Text style={styles.sectionTitle}>Ideas Recientes</Text>
           <View style={styles.ideaCountBadge}>
-            <Text style={styles.ideaCount}>{ideas.length}</Text>
+            <Text style={styles.ideaCount}>{filteredIdeas.length}</Text>
           </View>
         </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterScrollContent}>
+          <TouchableOpacity style={[styles.filterChip, filterPillar === null && styles.filterChipActive]} onPress={() => { triggerSelectionHaptic(); setFilterPillar(null); }}>
+            <Text style={[styles.filterChipText, filterPillar === null && styles.filterChipTextActive]}>Todas</Text>
+          </TouchableOpacity>
+          {(Object.entries(PILLARS_CONFIG) as [ContentPillar, typeof PILLARS_CONFIG[ContentPillar]][]).map(([key, config]) => (
+            <TouchableOpacity key={key} style={[styles.filterChip, filterPillar === key && { backgroundColor: config.color, borderColor: config.color }]} onPress={() => { triggerSelectionHaptic(); setFilterPillar(key); }}>
+              <Ionicons name={config.icon as any} size={14} color={filterPillar === key ? '#FFF' : colors.textSecondary} style={{ marginRight: 4 }} />
+              <Text style={[styles.filterChipText, filterPillar === key && { color: '#FFF' }]}>{config.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </>
     ),
-    [events, ideas.length]
+    [events, ideas, filteredIdeas.length, filterPillar, pillarCounts, totalIdeas, promotionalPercentage, showPromoWarning]
   );
 
   const renderEmptyState = useCallback(
@@ -116,13 +194,14 @@ export const HomeScreen: React.FC = () => {
       <StatusBar style="light" />
 
       <FlatList
-        data={ideas}
+        data={filteredIdeas}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <IdeaCard
             idea={item}
             event={events.find((e) => e.id === item.eventId)}
             onPress={() => handleIdeaPress(item.id)}
+            index={index}
           />
         )}
         ListHeaderComponent={renderHeader}
@@ -131,7 +210,7 @@ export const HomeScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
       />
 
-      <FloatingActionButton onPress={() => setCaptureModalVisible(true)} />
+      <FloatingActionButton onPress={() => { triggerLightHaptic(); setCaptureModalVisible(true); }} />
 
       <QuickCaptureModal
         visible={captureModalVisible}
@@ -219,7 +298,84 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surfaceElevated,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  balanceWidget: {
+    marginHorizontal: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  balanceBar: {
+    flexDirection: 'row',
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  balanceStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  balanceStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  balanceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  balanceStatText: {
+    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+  },
+  promoWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    padding: spacing.sm,
+    backgroundColor: colors.warning + '15',
+    borderRadius: borderRadius.sm,
+  },
+  promoWarningText: {
+    fontSize: fontSize.xs,
+    color: colors.warning,
+    flex: 1,
+  },
+  filterScroll: {
+    marginBottom: spacing.md,
+  },
+  filterScrollContent: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  filterChipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  filterChipText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '500',
+  },
+  filterChipTextActive: {
+    color: colors.background,
   },
   ideaCount: {
     fontSize: fontSize.sm,

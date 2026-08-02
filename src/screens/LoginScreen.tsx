@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +7,7 @@ import { colors, spacing, fontSize, borderRadius } from '../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 
 export const LoginScreen: React.FC = () => {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInWithApple } = useAuth();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -24,6 +24,13 @@ export const LoginScreen: React.FC = () => {
             <Ionicons name="logo-google" size={24} color={colors.background} />
             <Text style={styles.googleButtonText}>Continuar con Google</Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity style={styles.appleButton} onPress={signInWithApple}>
+              <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />
+              <Text style={styles.appleButtonText}>Continuar con Apple</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -72,6 +79,22 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     color: colors.background,
+    fontSize: fontSize.md,
+    fontWeight: '700',
+  },
+  appleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
+    gap: spacing.md,
+  },
+  appleButtonText: {
+    color: colors.textPrimary,
     fontSize: fontSize.md,
     fontWeight: '700',
   },

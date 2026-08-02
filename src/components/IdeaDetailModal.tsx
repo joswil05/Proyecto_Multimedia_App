@@ -12,13 +12,25 @@ import {
   Alert,
   Linking,
   Switch,
+  Image,
+  ActivityIndicator,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { SlideInUp, SlideOutDown, SlideInDown } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { Idea, IdeaStatus, STATUS_CONFIG } from '../types';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
+import { Idea, IdeaStatus, STATUS_CONFIG, ContentPillar } from '../types';
+import { PILLARS_CONFIG } from '../constants/pillars';
 import { useData } from '../context/DataContext';
+import { polishIdeaWithGemini, PolishFocus } from '../services/gemini';
 import { colors, spacing, borderRadius, fontSize } from '../constants/theme';
+import { 
+  triggerLightHaptic, 
+  triggerSelectionHaptic, 
+  triggerSuccessHaptic, 
+  triggerHeavyHaptic 
+} from '../utils/haptics';
 
 interface Props {
   visible: boolean;
@@ -39,6 +51,8 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
   const [copyText, setCopyText] = useState('');
   const [scriptText, setScriptText] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [isPolishing, setIsPolishing] = useState(false);
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [newChecklistItem, setNewChecklistItem] = useState('');
   
   // Production Links
@@ -48,6 +62,9 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
   // Meeting Notes
   const [meetingNotes, setMeetingNotes] = useState('');
+
+  // Tabs State
+  const [activeTab, setActiveTab] = useState<'info' | 'produccion' | 'copy'>('info');
 
   useEffect(() => {
     if (idea) {
@@ -65,13 +82,42 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
   const event = events.find((e) => e.id === idea.eventId);
 
   const handleStatusChange = (status: IdeaStatus) => {
+    triggerSelectionHaptic();
     updateIdea(idea.id, { status });
   };
 
   const handleDateChange = (event: any, date?: Date) => {
-    setShowDatePicker(false);
+    if (Platform.OS === 'ios') {
+      setShowDatePicker(false);
+    }
     if (date) {
       updateIdea(idea.id, { scheduledDate: date });
+    }
+  };
+
+  const openDatePicker = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: idea.scheduledDate || new Date(),
+        mode: 'date',
+        onChange: handleDateChange,
+      });
+    } else {
+      setShowDatePicker(true);
+    }
+  };
+
+  const handlePolishIdea = async (focus: PolishFocus = 'default') => {
+    setIsPolishing(true);
+    try {
+      const aiData = await polishIdeaWithGemini(idea.text, focus);
+      updateIdea(idea.id, { aiPolishData: aiData });
+      triggerSuccessHaptic();
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Hubo un problema al pulir la idea con el Asistente. Revisa tu API Key o conexión.');
+    } finally {
+      setIsPolishing(false);
     }
   };
 
@@ -90,6 +136,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(copyText);
+    triggerSuccessHaptic();
     Alert.alert('¡Copiado!', 'El copy se ha copiado al portapapeles.');
   };
 
@@ -108,6 +155,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
   const addChecklistItem = () => {
     if (!newChecklistItem.trim()) return;
+    triggerSelectionHaptic();
     const currentChecklist = idea.checklist || [];
     const newItem = {
       id: `chk-${Date.now()}`,
@@ -120,13 +168,19 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
   const toggleChecklistItem = (id: string) => {
     const currentChecklist = idea.checklist || [];
-    const updated = currentChecklist.map((c) =>
-      c.id === id ? { ...c, completed: !c.completed } : c
-    );
+    const updated = currentChecklist.map((c) => {
+      if (c.id === id) {
+        if (!c.completed) triggerSuccessHaptic();
+        else triggerLightHaptic();
+        return { ...c, completed: !c.completed };
+      }
+      return c;
+    });
     updateIdea(idea.id, { checklist: updated });
   };
 
   const handleDeleteChecklist = (id: string) => {
+    triggerLightHaptic();
     const currentChecklist = idea.checklist || [];
     updateIdea(idea.id, { checklist: currentChecklist.filter(c => c.id !== id) });
   };
@@ -138,6 +192,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
         text: 'Eliminar',
         style: 'destructive',
         onPress: () => {
+          triggerHeavyHaptic();
           deleteIdea(idea.id);
           onClose();
         },
@@ -151,23 +206,45 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
   const progressPercent = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: '#09090B' }]} />
+        </TouchableWithoutFeedback>
+        <Animated.View style={styles.modalOverlay} entering={SlideInDown.springify()} exiting={SlideOutDown.springify()}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
         
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.iconButton}>
             <Ionicons name="close" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Ficha Técnica de Producción</Text>
+          <Text style={styles.headerTitle}>Ficha Técnica</Text>
           <TouchableOpacity onPress={handleDelete} style={styles.iconButton}>
             <Ionicons name="trash-outline" size={24} color={colors.error} />
           </TouchableOpacity>
         </View>
 
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'info' && styles.tabButtonActive]} onPress={() => { triggerSelectionHaptic(); setActiveTab('info'); }}>
+            <Ionicons name="information-circle-outline" size={16} color={activeTab === 'info' ? colors.accent : colors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>Info</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'produccion' && styles.tabButtonActive]} onPress={() => { triggerSelectionHaptic(); setActiveTab('produccion'); }}>
+            <Ionicons name="videocam-outline" size={16} color={activeTab === 'produccion' ? colors.accent : colors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'produccion' && styles.tabTextActive]}>Producción</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.tabButton, activeTab === 'copy' && styles.tabButtonActive]} onPress={() => { triggerSelectionHaptic(); setActiveTab('copy'); }}>
+            <Ionicons name="document-text-outline" size={16} color={activeTab === 'copy' ? colors.accent : colors.textSecondary} />
+            <Text style={[styles.tabText, activeTab === 'copy' && styles.tabTextActive]}>Copy</Text>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           
-          <Text style={styles.ideaText}>{idea.text}</Text>
+          {activeTab === 'info' && (
+            <>
+              <Text style={styles.ideaText}>{idea.text}</Text>
 
           {/* Event Badge */}
           {event && (
@@ -177,11 +254,38 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             </View>
           )}
 
+          {/* Pillar Badge / Selector */}
+          <View style={[styles.section, { marginTop: spacing.md }]}>
+            <Text style={styles.sectionTitle}>Pilar Estratégico</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8 }}>
+              {(Object.entries(PILLARS_CONFIG) as [ContentPillar, typeof PILLARS_CONFIG[ContentPillar]][]).map(([key, config]) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[
+                    styles.memberBadge,
+                    idea.pillar === key && { backgroundColor: config.color + '25', borderColor: config.color },
+                  ]}
+                  onPress={() => { triggerSelectionHaptic(); updateIdea(idea.id, { pillar: idea.pillar === key ? undefined : key }); }}
+                >
+                  <Ionicons 
+                    name={config.icon as any} 
+                    size={14} 
+                    color={idea.pillar === key ? config.color : colors.textSecondary} 
+                    style={{ marginRight: 4 }} 
+                  />
+                  <Text style={[styles.memberText, idea.pillar === key && { color: config.color }]}>
+                    {config.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
           {idea.status === 'banco' ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Revisión Editorial</Text>
               
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8 }}>
                 {REVIEW_STATUSES.map((status) => {
                   const isActive = idea.reviewStatus === status;
                   return (
@@ -191,7 +295,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
                         styles.pipelineChip,
                         isActive && { backgroundColor: colors.accent, borderColor: colors.accent },
                       ]}
-                      onPress={() => updateIdea(idea.id, { reviewStatus: status })}
+                      onPress={() => { triggerSelectionHaptic(); updateIdea(idea.id, { reviewStatus: status }); }}
                     >
                       <Ionicons
                         name={status === 'evaluacion' ? 'search-outline' : status === 'ajustes' ? 'construct-outline' : status === 'aprobada' ? 'checkmark-circle-outline' : 'archive-outline'}
@@ -209,12 +313,12 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
               <View style={styles.rowSection}>
                 <View style={[styles.section, { flex: 1 }]}>
                   <Text style={styles.sectionTitle}>Prioridad</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8 }}>
                     {PRIORITIES.map((pri) => (
                       <TouchableOpacity
                         key={pri}
                         style={[styles.memberBadge, idea.priority === pri && styles.memberBadgeActive]}
-                        onPress={() => updateIdea(idea.id, { priority: pri })}
+                        onPress={() => { triggerSelectionHaptic(); updateIdea(idea.id, { priority: pri }); }}
                       >
                         <Ionicons name="flash-outline" size={14} color={idea.priority === pri ? colors.accentLight : colors.textSecondary} style={{ marginRight: 4 }} />
                         <Text style={[styles.memberText, idea.priority === pri && styles.memberTextActive]}>{pri}</Text>
@@ -225,12 +329,12 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
                 <View style={[styles.section, { flex: 1 }]}>
                   <Text style={styles.sectionTitle}>Dificultad</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8 }}>
                     {COMPLEXITIES.map((comp) => (
                       <TouchableOpacity
                         key={comp}
                         style={[styles.memberBadge, idea.complexity === comp && styles.memberBadgeActive]}
-                        onPress={() => updateIdea(idea.id, { complexity: comp })}
+                        onPress={() => { triggerSelectionHaptic(); updateIdea(idea.id, { complexity: comp }); }}
                       >
                         <Ionicons name={comp === 'rapida' ? 'time-outline' : comp === 'media' ? 'construct-outline' : 'alert-circle-outline'} size={14} color={idea.complexity === comp ? colors.accentLight : colors.textSecondary} style={{ marginRight: 4 }} />
                         <Text style={[styles.memberText, idea.complexity === comp && styles.memberTextActive]}>{comp}</Text>
@@ -253,7 +357,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
 
               <TouchableOpacity 
                 style={styles.approveButton}
-                onPress={() => updateIdea(idea.id, { status: 'idea' })}
+                onPress={() => { triggerSuccessHaptic(); updateIdea(idea.id, { status: 'idea' }); }}
               >
                 <Ionicons name="rocket-outline" size={24} color={colors.background} />
                 <Text style={styles.approveButtonText}>Aprobar e Iniciar Producción</Text>
@@ -262,7 +366,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
           ) : (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Estado (Pipeline)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pipelineContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8 }}>
                 {PIPELINE_STATUSES.map((status) => {
                   const config = STATUS_CONFIG[status];
                   const isActive = idea.status === status;
@@ -295,7 +399,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             <View style={[styles.section, { flex: 1.5 }]}>
               <Text style={styles.sectionTitle}>Fecha Programada</Text>
               <View style={styles.datePickerContainer}>
-                <TouchableOpacity style={styles.datePickerButton} onPress={() => setShowDatePicker(true)}>
+                <TouchableOpacity style={styles.datePickerButton} onPress={openDatePicker}>
                   <Ionicons name="calendar-outline" size={20} color={colors.textPrimary} />
                   <Text style={styles.dateText}>
                     {idea.scheduledDate
@@ -319,7 +423,7 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
                 )}
               </View>
 
-              {showDatePicker && (
+              {showDatePicker && Platform.OS === 'ios' && (
                 <DateTimePicker
                   value={idea.scheduledDate || new Date()}
                   mode="datetime"
@@ -330,28 +434,45 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
             </View>
             <View style={[styles.section, { flex: 1 }]}>
               <Text style={styles.sectionTitle}>Responsable</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                {teamMembers.map((member) => {
-                  const displayName = member.name || member.email || 'Desconocido';
-                  return (
-                    <TouchableOpacity
-                      key={member.uid}
-                      style={[
-                        styles.memberBadge,
-                        idea.assignedTo === displayName && styles.memberBadgeActive
-                      ]}
-                      onPress={() => updateIdea(idea.id, { assignedTo: displayName })}
-                    >
-                      <Text style={[styles.memberText, idea.assignedTo === displayName && styles.memberTextActive]}>
-                        {displayName}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              <View style={[styles.datePickerButton, { padding: 8 }]}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 28, gap: 8, flexDirection: 'row', alignItems: 'center' }}>
+                  {teamMembers.map((member) => {
+                    const displayName = member.name || member.email || 'Desconocido';
+                    return (
+                      <TouchableOpacity
+                        key={member.uid}
+                        style={[
+                          styles.memberBadge,
+                          idea.assignedTo === displayName && styles.memberBadgeActive
+                        ]}
+                        onPress={() => { triggerSelectionHaptic(); updateIdea(idea.id, { assignedTo: displayName }); }}
+                      >
+                        {member.photoURL ? (
+                          <Image source={{ uri: member.photoURL }} style={styles.memberAvatar} />
+                        ) : (
+                          <View style={styles.memberAvatarPlaceholder}>
+                            <Ionicons name="person" size={14} color={colors.textSecondary} />
+                          </View>
+                        )}
+                        <Text 
+                          style={[styles.memberText, idea.assignedTo === displayName && styles.memberTextActive]}
+                          numberOfLines={1} 
+                          ellipsizeMode="tail"
+                        >
+                          {displayName}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
             </View>
           </View>
+          </>
+          )}
 
+          {activeTab === 'produccion' && (
+            <>
           {/* Checklist */}
           <View style={styles.section}>
             <View style={styles.progressRow}>
@@ -468,21 +589,30 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
               onBlur={saveTextsAndLinks}
             />
           </View>
+          </>
+          )}
 
+          {activeTab === 'copy' && (
+            <>
           <View style={styles.section}>
             <View style={styles.aiHeader}>
               <Ionicons name="sparkles" size={20} color={colors.accentLight} />
               <Text style={styles.sectionTitle}>IA & Copy Final</Text>
             </View>
 
-            {idea.aiHooks && idea.aiHooks.length > 0 && (
+            {idea.aiPolishData && idea.aiPolishData.suggestedCaption && (
               <View style={styles.hooksContainer}>
-                <Text style={styles.hooksTitle}>Ganchos Sugeridos:</Text>
-                {idea.aiHooks.map((hook, index) => (
-                  <View key={index} style={styles.hookItem}>
-                    <Text style={styles.hookText}>• {hook}</Text>
-                  </View>
-                ))}
+                <Text style={styles.hooksTitle}>Caption Sugerido (IA):</Text>
+                <View style={styles.hookItem}>
+                  <Text style={styles.hookText}>{idea.aiPolishData.suggestedCaption}</Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.copyButton, { marginTop: spacing.sm, paddingVertical: spacing.sm }]} 
+                  onPress={() => { setCopyText(idea.aiPolishData!.suggestedCaption); triggerSelectionHaptic(); }}
+                >
+                  <Ionicons name="arrow-down-outline" size={16} color={colors.background} />
+                  <Text style={styles.copyButtonText}>Usar este caption</Text>
+                </TouchableOpacity>
               </View>
             )}
 
@@ -502,13 +632,31 @@ export const IdeaDetailModal: React.FC<Props> = ({ visible, onClose, ideaId }) =
               </TouchableOpacity>
             </View>
           </View>
+          </>
+          )}
         </ScrollView>
-      </KeyboardAvoidingView>
+
+        </KeyboardAvoidingView>
+      </Animated.View>
+      </View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: colors.background,
+    marginTop: Platform.OS === 'ios' ? 50 : 0,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -521,6 +669,35 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    gap: spacing.sm,
+    justifyContent: 'center'
+  },
+  tabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabButtonActive: {
+    borderBottomColor: colors.accent,
+  },
+  tabText: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: colors.accent,
   },
   headerTitle: {
     fontSize: fontSize.md,
@@ -572,12 +749,13 @@ const styles = StyleSheet.create({
   },
   pipelineContainer: {
     gap: spacing.sm,
+    paddingVertical: 2,
   },
   pipelineChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: borderRadius.full,
     borderWidth: 1,
     borderColor: colors.border,
@@ -604,17 +782,19 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   memberBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+    paddingLeft: 6,
+    paddingVertical: 4,
     borderRadius: borderRadius.full,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surfaceBright,
     marginRight: spacing.sm,
   },
   memberBadgeActive: {
     backgroundColor: colors.accentSubtle,
     borderColor: colors.accent,
+    borderWidth: 1,
   },
   memberText: {
     fontSize: fontSize.sm,
@@ -624,6 +804,21 @@ const styles = StyleSheet.create({
   memberTextActive: {
     color: colors.accentLight,
     fontWeight: '700',
+  },
+  memberAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginRight: 6,
+  },
+  memberAvatarPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
   },
   progressRow: {
     flexDirection: 'row',
@@ -769,6 +964,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     fontWeight: '600',
   },
+  refineChipText: {
+    color: colors.textPrimary,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+  },
   approveButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -797,5 +997,62 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.textSecondary,
     flex: 1,
+  },
+  aiPolishContainer: {
+    marginTop: spacing.md,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  aiSubtitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  angleCard: {
+    backgroundColor: colors.surfaceBright,
+    padding: spacing.md,
+    borderRadius: borderRadius.sm,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  angleTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.accent,
+    marginBottom: 4,
+  },
+  angleNarrative: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    lineHeight: 20,
+  },
+  aiFormatContainer: {
+    flexDirection: 'row',
+    marginTop: spacing.xs,
+  },
+  aiFormatLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginRight: 4,
+  },
+  aiFormatValue: {
+    fontSize: fontSize.sm,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  refineChip: {
+    backgroundColor: colors.surfaceBright,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: spacing.sm,
   },
 });

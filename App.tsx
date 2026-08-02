@@ -1,3 +1,5 @@
+import 'react-native-gesture-handler';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +12,7 @@ import { CalendarScreen } from './src/screens/CalendarScreen';
 import { PipelineScreen } from './src/screens/PipelineScreen';
 import { EventsScreen } from './src/screens/EventsScreen';
 import { IdeaDetailModal } from './src/components/IdeaDetailModal';
+import { GlobalAIAssistant } from './src/components/GlobalAIAssistant';
 import { useData } from './src/context/DataContext';
 import { colors, spacing, fontSize, borderRadius } from './src/constants/theme';
 
@@ -27,6 +30,18 @@ const MainTabs = () => {
         {activeTab === 'pipeline' && <PipelineScreen />}
         {activeTab === 'calendar' && <CalendarScreen />}
         {activeTab === 'events' && <EventsScreen />}
+
+        {/* Global Idea Detail Modal for Notifications */}
+        {globalSelectedIdeaId !== null && (
+          <IdeaDetailModal
+            visible={globalSelectedIdeaId !== null}
+            onClose={() => setGlobalSelectedIdeaId(null)}
+            ideaId={globalSelectedIdeaId}
+          />
+        )}
+
+        {/* Global AI Assistant */}
+        <GlobalAIAssistant />
       </View>
       
       <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
@@ -77,14 +92,6 @@ const MainTabs = () => {
 
       </View>
 
-      {/* Global Idea Detail Modal for Notifications */}
-      {globalSelectedIdeaId !== null && (
-        <IdeaDetailModal
-          visible={globalSelectedIdeaId !== null}
-          onClose={() => setGlobalSelectedIdeaId(null)}
-          ideaId={globalSelectedIdeaId}
-        />
-      )}
     </View>
   );
 };
@@ -113,11 +120,13 @@ const RootNavigator = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <RootNavigator />
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
