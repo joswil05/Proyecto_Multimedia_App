@@ -2,6 +2,7 @@
   "expo": {
     "name": "content-os-app",
     "slug": "content-os-app",
+    "scheme": "contentos",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,6 +11,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.multimediacafs.contentos",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -23,7 +26,18 @@
     },
     "plugins": [
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
-    ]
+      "expo-web-browser",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.333003522153-placeholder"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ffcdbe6c-deee-4501-9255-8743d5240493"
+      }
+    }
   }
 }

@@ -1,26 +1,28 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Platform } from 'react-native';
-import { 
-  onAuthStateChanged, 
-  signInWithCredential, 
-  GoogleAuthProvider, 
-  OAuthProvider, 
-  signOut as firebaseSignOut 
+import {
+  onAuthStateChanged,
+  signInWithCredential,
+  GoogleAuthProvider,
+  signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import * as Google from 'expo-auth-session/providers/google';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import * as WebBrowser from 'expo-web-browser';
+import {
+  GoogleSignin,
+  isSuccessResponse,
+} from '@react-native-google-signin/google-signin';
 import { auth, db } from '../config/firebase';
 import { AppUser } from '../types';
 
-WebBrowser.maybeCompleteAuthSession();
+// Configure Google Sign-In with the Web Client ID
+// (The native module uses google-services.json for the Android Client ID automatically)
+GoogleSignin.configure({
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+});
 
 interface AuthContextProps {
   user: AppUser | null;
   loading: boolean;
   signInWithGoogle: () => void;
-  signInWithApple: () => void;
   signOut: () => Promise<void>;
 }
 
@@ -30,18 +32,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'placeholder',
-  });
-
-  useEffect(() => {
-    if (response?.type === 'success') {
-      const { id_token } = response.params;
-      const credential = GoogleAuthProvider.credential(id_token);
-      signInWithCredential(auth, credential).catch(console.error);
-    }
-  }, [response]);
-
+  // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -51,7 +42,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let appUser: AppUser;
 
         if (!userSnap.exists()) {
-          // Registro nuevo usuario
+          // First-time user — create profile in Firestore
           appUser = {
             uid: firebaseUser.uid,
             name: firebaseUser.displayName,
@@ -74,42 +65,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = () => {
-    promptAsync();
-  };
-
-  const signInWithApple = async () => {
-    if (Platform.OS !== 'ios') return;
+  // Native Google Sign-In flow
+  const signInWithGoogle = async () => {
     try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      const { identityToken } = credential;
-      if (identityToken) {
-        const provider = new OAuthProvider('apple.com');
-        const authCredential = provider.credential({
-          idToken: identityToken,
-        });
-        await signInWithCredential(auth, authCredential);
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+
+      if (isSuccessResponse(response)) {
+        const { idToken } = response.data;
+        if (idToken) {
+          const credential = GoogleAuthProvider.credential(idToken);
+          await signInWithCredential(auth, credential);
+        }
       }
-    } catch (e: any) {
-      if (e.code === 'ERR_REQUEST_CANCELED') {
-        // user canceled
-      } else {
-        console.error(e);
+    } catch (error: any) {
+      // User cancelled or error — silently ignore cancellations
+      if (error?.code !== 'SIGN_IN_CANCELLED' && error?.code !== '12501') {
+        console.error('Google Sign-In error:', error);
       }
     }
   };
 
   const signOut = async () => {
+    try {
+      await GoogleSignin.signOut();
+    } catch (_) {
+      // Google SDK might not have an active session
+    }
     await firebaseSignOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signInWithApple, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

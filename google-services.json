@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "333003522153",
+    "project_id": "multimedia-cafs",
+    "storage_bucket": "multimedia-cafs.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:333003522153:android:ff492f0ad6353042ab62f8",
+        "android_client_info": {
+          "package_name": "com.multimediacafs.contentos"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "333003522153-ivd0vhl8pgr15bkia0lsjfp3hdr79voq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.multimediacafs.contentos",
+            "certificate_hash": "e2d15f53e202fd350c09a701f5e4c55bcf0f93b9"
+          }
+        },
+        {
+          "client_id": "333003522153-q8i1alpb2dooa4c51p6hvvjic0a834rg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDivjTjSdJO32ylr4uhuXY99F_dM5OcPeo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "333003522153-q8i1alpb2dooa4c51p6hvvjic0a834rg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

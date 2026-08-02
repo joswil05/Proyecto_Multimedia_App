@@ -1,19 +1,17 @@
 import React, { createContext, useState, useCallback, ReactNode } from 'react';
 import { Idea, PinnedEvent, AppUser } from '../types';
-import * as Notifications from 'expo-notifications';
+// Mock for expo-notifications since it requires native module in dev build
+const Notifications: any = {
+  setNotificationHandler: () => {},
+  requestPermissionsAsync: async () => ({ status: 'granted' }),
+  addNotificationResponseReceivedListener: (_cb: any) => ({ remove: () => {} }),
+  scheduleNotificationAsync: async (_opts: any) => 'mock-id',
+  cancelScheduledNotificationAsync: async (_id: any) => {},
+};
+
 import { collection, onSnapshot, query, where, addDoc, updateDoc, doc, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 interface DataContextProps {
   events: PinnedEvent[];
@@ -92,7 +90,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     })();
 
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response: any) => {
       const ideaId = response.notification.request.content.data?.ideaId;
       if (ideaId && typeof ideaId === 'string') {
         setGlobalSelectedIdeaId(ideaId);
